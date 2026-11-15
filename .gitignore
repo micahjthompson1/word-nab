@@ -4,3 +4,6 @@ tools/.cache/
 node_modules/
 .DS_Store
 .claude/
+
+# Personal word lists exported from the app
+my-word-lists/
