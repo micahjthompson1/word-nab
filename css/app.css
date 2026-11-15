@@ -15,6 +15,7 @@
   --danger: #b3261e;
   --danger-soft: #fde8e6;
   --warn: #8a5a00;
+  --ok: #1a7f37;
   --serif: 'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, serif;
   --sans: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
 }
@@ -34,6 +35,7 @@
     --danger: #ff9a90;
     --danger-soft: #3a1512;
     --warn: #f0c060;
+    --ok: #6fdc8c;
   }
 }
 
@@ -109,7 +111,8 @@ main,
 
 .button,
 select,
-input[type='search'] {
+input[type='search'],
+input[type='text'] {
   font: inherit;
   color: var(--ink);
   background: var(--surface);
@@ -489,6 +492,222 @@ mark {
   color: var(--danger);
 }
 
+/* ---- pronunciation ---- */
+
+.speak {
+  display: inline-grid;
+  place-items: center;
+  width: 1.9rem;
+  height: 1.9rem;
+  margin-left: 4px;
+  padding: 0;
+  vertical-align: middle;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+/* The icon is a mask so it takes the text colour in both themes. */
+.speak::before {
+  content: '';
+  width: 1.15rem;
+  height: 1.15rem;
+  background: currentColor;
+  -webkit-mask: url('../img/speaker.svg') center / contain no-repeat;
+  mask: url('../img/speaker.svg') center / contain no-repeat;
+}
+
+.speak:hover,
+.speak.speaking {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+/* ---- flashcards ---- */
+
+.flashcards {
+  width: min(34rem, calc(100vw - 24px));
+  max-height: calc(100dvh - 24px);
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: 0 12px 48px rgb(0 0 0 / 0.3);
+}
+
+/* Only while open: a closed dialog must stay display:none. */
+.flashcards[open] {
+  display: flex;
+  flex-direction: column;
+}
+
+.flashcards::backdrop {
+  background: rgb(6 14 28 / 0.6);
+}
+
+.flash-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px 10px 20px;
+  border-bottom: 1px solid var(--line);
+}
+
+.flash-head h2 {
+  font-size: 1.15rem;
+}
+
+.flash-counts {
+  margin: 0 auto 0 0;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.flash-body {
+  flex: 1;
+  display: grid;
+  align-content: center;
+  min-height: 21rem;
+  padding: 20px;
+  overflow-y: auto;
+}
+
+.flash-card {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  margin: 0;
+  text-align: center;
+}
+
+.flash-card p {
+  margin: 0;
+}
+
+.flash-prompt {
+  color: var(--muted);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.flash-word {
+  font: 600 2.4rem/1.2 var(--serif);
+  overflow-wrap: anywhere;
+}
+
+.flash-meaning {
+  font-size: 1.2rem;
+}
+
+.flash-line {
+  font: 1.15rem/1.6 var(--serif);
+}
+
+.gap {
+  display: inline-block;
+  min-width: 3.5em;
+  border-bottom: 2px solid var(--accent);
+}
+
+.flash-input {
+  width: min(100%, 17rem);
+  text-align: center;
+}
+
+.flash-show {
+  margin-top: 8px;
+  min-width: 10rem;
+}
+
+.flash-result {
+  font-weight: 600;
+}
+
+.flash-result.right {
+  color: var(--ok);
+}
+
+.flash-result.accents {
+  color: var(--warn);
+}
+
+.flash-result.wrong {
+  color: var(--danger);
+}
+
+.ratings {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  width: 100%;
+  margin-top: 10px;
+}
+
+.rate {
+  display: grid;
+  padding: 0.4rem 0.25rem;
+  line-height: 1.3;
+}
+
+.rate small {
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 400;
+}
+
+.rate[data-rating='1'] {
+  color: var(--danger);
+}
+
+.rate[data-rating='3'] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+
+.rate[data-rating='3'] small {
+  color: inherit;
+  opacity: 0.85;
+}
+
+.flash-options {
+  padding: 10px 20px 14px;
+  border-top: 1px solid var(--line);
+  font-size: 0.9rem;
+}
+
+.flash-options summary {
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.flash-options .toolbar {
+  margin-top: 10px;
+}
+
+.toolbar .check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 2.5rem;
+}
+
+.check input {
+  width: 1.15rem;
+  height: 1.15rem;
+  accent-color: var(--accent);
+}
+
+.flash-help {
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
 .empty,
 .removed-note {
   color: var(--muted);
@@ -582,6 +801,21 @@ mark {
     max-width: 8.5rem;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+
+  /* Flashcards fill the screen. */
+  .flashcards {
+    width: 100vw;
+    max-width: 100vw;
+    height: 100dvh;
+    max-height: 100dvh;
+    margin: 0;
+    border: 0;
+    border-radius: 0;
+  }
+
+  .flash-options .toolbar .check {
+    width: 100%;
   }
 }
 

@@ -1,13 +1,12 @@
 // The page itself: wires the buttons to the modules and draws the two lists.
-//
-// Song titles, lyrics and translations all come from outside services, so
-// nothing here builds HTML from strings — every node is created with h(),
-// which only ever sets text.
 
 import { CONFIG } from './config.js';
 import { toCsv } from './csv.js';
 import { loadDictionary } from './dictionary.js';
+import { h, markedLine, setStatus, speakButton } from './dom.js';
+import * as flashcards from './flashcards.js';
 import { fetchLyrics, searchSongs } from './lyrics.js';
+import * as speech from './speech.js';
 import * as spotify from './spotify.js';
 import { load, save } from './storage.js';
 import { LANGUAGE_NAMES, detectLanguage, extractWords } from './text.js';
@@ -31,6 +30,7 @@ const el = {
   wordCount: $('word-count'),
   sort: $('sort'),
   hide: $('hide'),
+  flashcardsOpen: $('flashcards-open'),
   translateAll: $('translate-all'),
   downloadCsv: $('download-csv'),
   clearWords: $('clear-words'),
@@ -76,6 +76,7 @@ async function start() {
   el.sort.value = state.prefs.sort;
   el.hide.value = String(state.prefs.hide);
   bindEvents();
+  flashcards.init({ deck: shownWords, onClose: renderWords });
   renderWords();
   renderTracks();
 
@@ -99,6 +100,8 @@ function bindEvents() {
   el.downloadCsv.addEventListener('click', downloadCsv);
   el.clearWords.addEventListener('click', clearWords);
   el.words.addEventListener('click', onWordClick);
+  el.flashcardsOpen.addEventListener('click', flashcards.open);
+  document.addEventListener('click', onSpeakClick);
   enableSwipeToDelete(el.words);
 }
 
@@ -352,9 +355,14 @@ function updatePrefs(change) {
   renderWords();
 }
 
-/** The saved words as currently filtered and sorted — what the list and the CSV show. */
+/** The saved words minus those hidden by "Hide basics" — also what the flashcards practise. */
+function shownWords() {
+  return wordList.allWords().filter((word) => word.rank > state.prefs.hide);
+}
+
+/** The shown words in the chosen order — what the list and the CSV show. */
 function visibleWords() {
-  const words = wordList.allWords().filter((word) => word.rank > state.prefs.hide);
+  const words = shownWords();
   const french = new Intl.Collator('fr');
   const order = {
     recent: (a, b) => b.addedAt - a.addedAt,
@@ -364,7 +372,7 @@ function visibleWords() {
   }[state.prefs.sort];
   // Array.prototype.sort is stable, so "newest first" keeps each song's words
   // in the order they are sung.
-  return [...words].sort(order);
+  return words.sort(order);
 }
 
 function renderWords() {
@@ -383,6 +391,9 @@ function renderWords() {
   const untranslated = words.some((word) => !word.english);
   el.translateAll.disabled = !untranslated && !state.translatingAll;
   el.downloadCsv.disabled = words.length === 0;
+  const waiting = flashcards.waitingCount();
+  el.flashcardsOpen.disabled = words.length === 0;
+  el.flashcardsOpen.textContent = waiting ? `Flashcards (${waiting})` : 'Flashcards';
   el.clearWords.disabled = total === 0;
 
   const removed = wordList.removedCount();
@@ -396,11 +407,10 @@ function renderWords() {
 }
 
 function wordRow(word) {
-  const line = word.line;
   return h(
     'li',
     { class: 'word', dataset: { key: word.key } },
-    h('div', { class: 'word-fr', lang: 'fr' }, word.word),
+    h('div', { class: 'word-fr' }, h('span', { lang: 'fr' }, word.word), speakButton(word.word)),
     h(
       'div',
       { class: 'word-meaning' },
@@ -411,13 +421,7 @@ function wordRow(word) {
     h(
       'div',
       { class: 'word-context' },
-      h(
-        'p',
-        { class: 'line-fr', lang: 'fr' },
-        line.slice(0, word.start),
-        h('mark', {}, line.slice(word.start, word.end)),
-        line.slice(word.end),
-      ),
+      h('p', { class: 'line-fr' }, markedLine(word), speakButton(word.line)),
       word.english
         ? h('p', { class: 'line-en' }, word.english)
         : h('button', { class: 'link translate', type: 'button' }, 'Translate line'),
@@ -432,6 +436,28 @@ function onWordClick(event) {
   if (!row) return;
   if (event.target.closest('.remove')) removeWord(row);
   else if (event.target.closest('.translate')) translateRow(row, event.target.closest('.translate'));
+}
+
+// Every speaker button on the page, in the list or on a flashcard, lands here.
+let warnedNoVoice = false;
+function onSpeakClick(event) {
+  const button = event.target.closest('.speak');
+  if (!button) return;
+  if (button.classList.contains('speaking')) {
+    speech.stop();
+    return;
+  }
+  button.classList.add('speaking');
+  const outcome = speech.speak(button.dataset.speak, () => button.classList.remove('speaking'));
+  if (outcome === 'no-french-voice' && !warnedNoVoice) {
+    warnedNoVoice = true;
+    const status = button.closest('dialog')?.querySelector('.status') ?? el.wordsStatus;
+    setStatus(
+      status,
+      'This device has no French voice installed, so words may be read with the wrong accent. You can add one in your system’s speech settings.',
+      'warn',
+    );
+  }
 }
 
 function removeWord(row) {
@@ -459,8 +485,9 @@ function forgetRemoved() {
 
 function clearWords() {
   const total = wordList.allWords().length;
-  if (!window.confirm(`Clear all ${total} saved words? This cannot be undone.`)) return;
+  if (!window.confirm(`Clear all ${total} saved words and their flashcard progress? This cannot be undone.`)) return;
   wordList.clearWords();
+  flashcards.reset();
   setStatus(el.wordsStatus, '');
   renderTracks(); // songs are no longer marked "added"
   renderWords();
@@ -573,26 +600,6 @@ function enableSwipeToDelete(list) {
 
 // ---------------------------------------------------------------------------
 // Small helpers
-
-/** Create an element. Strings become text nodes, never HTML. */
-function h(tag, props = {}, ...children) {
-  const node = document.createElement(tag);
-  for (const [name, value] of Object.entries(props)) {
-    if (value === false || value === null || value === undefined) continue;
-    if (name === 'class') node.className = value;
-    else if (name === 'dataset') Object.assign(node.dataset, value);
-    else if (name.startsWith('on')) node.addEventListener(name.slice(2), value);
-    else if (name in node) node[name] = value;
-    else node.setAttribute(name, value);
-  }
-  node.append(...children.flat().filter((child) => child !== false && child !== null && child !== undefined && child !== ''));
-  return node;
-}
-
-function setStatus(node, message, kind = '') {
-  node.textContent = message;
-  node.className = `status ${kind}`.trim();
-}
 
 let toastTimer;
 function showToast(message, actionLabel, action) {
