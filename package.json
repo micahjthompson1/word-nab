@@ -1,0 +1,14 @@
+{
+  "name": "word-nab",
+  "private": true,
+  "type": "module",
+  "description": "Pick up common French words from the songs you play on Spotify.",
+  "scripts": {
+    "start": "node tools/serve.mjs",
+    "test": "node --test",
+    "build:words": "node tools/build-dictionary.mjs"
+  },
+  "engines": {
+    "node": ">=22.13"
+  }
+}
