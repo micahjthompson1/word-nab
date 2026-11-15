@@ -4,8 +4,9 @@ Pick up common French words from the songs you play on Spotify.
 
 wordNab lists your recently played songs, finds their lyrics, and pulls out the
 common French words. For each word it shows the English meaning, the lyric line
-it was sung in, and (on request) that line in English. Your word list is saved
-in the browser and can be downloaded as a CSV.
+it was sung in, and (on request) that line in English. You can hear each word
+and each lyric line spoken, and practise the words with flashcards. Your word
+list is saved in the browser and can be downloaded as a CSV.
 
 ## How it works
 
@@ -21,6 +22,8 @@ There is no server, database, queue or API key, so it costs nothing to host.
 | Language detection | Google Cloud Translation API | Counted locally from the lyrics |
 | Line translation | Google Cloud Translation + Celery worker + Redis | On-device browser translator, or the free MyMemory API |
 | Saved words | CSV download only | Kept in the browser, plus CSV download |
+| Pronunciation | — | The browser's built-in French voice |
+| Flashcards | — | Spaced repetition in the browser |
 
 ## Run it on your computer
 
@@ -97,6 +100,41 @@ The first run downloads the two source datasets (about 50 MB) into
 [`tools/overrides.mjs`](tools/overrides.mjs); add to that file if a meaning
 looks wrong.
 
+## Pronunciation
+
+The speaker button next to a word or a lyric line reads it aloud with the
+browser's built-in speech synthesis. That keeps it free: there are no audio
+files to host and no text-to-speech service to pay for, and with a voice
+installed on the device it works offline.
+
+The app picks the best French voice it finds; you can choose another under
+**Flashcards → Options and help → Voice**.
+
+## Flashcards
+
+**Flashcards** opens a practice session on the words in your list (minus any
+hidden by "Hide basics"). It combines the methods with the best evidence
+behind them:
+
+- **Recall before you look.** Each card asks a question and waits. Trying to
+  remember, even when you fail, fixes a word far better than re-reading it.
+- **Spaced repetition.** After each card you say how it went — Again, Hard,
+  Good or Easy — and the word is scheduled to return just before you are
+  likely to forget it: in a day or two at first, then weeks, then months. The
+  scheduler is [FSRS-6](https://github.com/open-spaced-repetition/awesome-fsrs/wiki/The-Algorithm),
+  from the open FSRS family built into Anki, with its default settings and a
+  90% recall target. It is in [`js/srs.js`](js/srs.js).
+- **A few new words a day** (5, 10 or 20), commonest first, mixed in with the
+  reviews. A word you miss comes back a few cards later in the same session.
+- **Both directions, in context.** A word is first shown in French for you to
+  recall the meaning. Once you know it, it also appears as a gap in its lyric
+  line, to be recalled (and typed, if you like) from the English meaning.
+  Producing a word is harder than recognising it and makes the memory stronger.
+- **Sound.** The French word is read aloud when its card appears, and the lyric
+  line when a gap card is answered.
+
+Progress is saved in the browser with the word list. "Clear list" resets it.
+
 ## Limits
 
 - **Meanings are for the dictionary form.** *yeux* is listed under *œil*,
@@ -104,8 +142,14 @@ looks wrong.
 - **Line translation** uses the browser's built-in translator where there is
   one (Chrome on a computer). Elsewhere it uses MyMemory, which allows roughly
   5,000 characters a day per visitor — a few hundred lyric lines.
-- **Your word list stays in one browser.** Clearing site data deletes it, and
-  it does not sync between devices. Download the CSV to keep a copy.
+- **Your word list and flashcard progress stay in one browser.** Clearing site
+  data deletes them, and they do not sync between devices. Download the CSV to
+  keep a copy of the words.
+- **Voices depend on the device.** Phones, Macs, Chrome and Edge usually come
+  with a French voice. Where none is installed (for example Firefox on a Windows PC
+  set up in English) the app says so; add a French voice in the system's speech
+  settings. A word read on its own can also be ambiguous — *est* is "is" or
+  "east" — so the lyric line is the better guide to how it sounds in use.
 - **Lyrics are crowd-sourced.** Some songs are missing, and some transcriptions
   have typos.
 

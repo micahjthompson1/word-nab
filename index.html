@@ -66,6 +66,7 @@
               <option value="1000">Hide the 1,000 most common</option>
             </select>
           </label>
+          <button class="button primary" id="flashcards-open" type="button" disabled>Flashcards</button>
           <button class="button" id="translate-all" type="button">Translate all lines</button>
           <button class="button" id="download-csv" type="button">Download CSV</button>
           <button class="button quiet" id="clear-words" type="button">Clear list</button>
@@ -96,8 +97,54 @@
       <a href="https://www.wikdict.com" rel="noopener">WikDict</a> / Wiktionary (CC BY-SA).
       Line translations run on your device where the browser supports it, otherwise by
       <a href="https://mymemory.translated.net" rel="noopener">MyMemory</a>.
+      Pronunciation uses a French voice built into your browser or device.
     </p>
   </footer>
+
+  <dialog class="flashcards" id="flashcards" aria-labelledby="flashcards-heading">
+    <header class="flash-head">
+      <h2 id="flashcards-heading">Flashcards</h2>
+      <p class="flash-counts" id="flash-counts"></p>
+      <button class="remove" id="flash-close" type="button" aria-label="Close flashcards" title="Close">×</button>
+    </header>
+    <div class="flash-body">
+      <p class="status" id="flash-status" role="status"></p>
+      <div id="flash-body"></div>
+    </div>
+    <details class="flash-options" id="flash-options">
+      <summary>Options and help</summary>
+      <div class="toolbar">
+        <label>
+          <span>New words a day</span>
+          <select id="flash-new">
+            <option value="5">5</option>
+            <option value="10">10</option>
+            <option value="20">20</option>
+          </select>
+        </label>
+        <label>
+          <span>Cards</span>
+          <select id="flash-style">
+            <option value="mix">Mix (recommended)</option>
+            <option value="word">French word → meaning</option>
+            <option value="gap">Fill the gap in the lyric</option>
+          </select>
+        </label>
+        <label id="flash-voice-row" hidden>
+          <span>Voice</span>
+          <select id="flash-voice"></select>
+        </label>
+        <label class="check"><input id="flash-speak" type="checkbox"> Say the cards aloud</label>
+      </div>
+      <p class="flash-help">
+        Try to answer from memory before you look. Then be honest:
+        <strong>Again</strong> if you did not know it, <strong>Hard</strong> if it took effort,
+        <strong>Good</strong> if you knew it, <strong>Easy</strong> if it was instant (keys 1–4).
+        Each word comes back just before you are likely to forget it, so a few minutes
+        a day is enough.
+      </p>
+    </details>
+  </dialog>
 
   <div class="toast" id="toast" role="status" hidden></div>
 
