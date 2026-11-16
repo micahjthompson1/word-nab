@@ -2,7 +2,8 @@
 // asked, and whether a typed answer is right. Pure functions (see srs.js for
 // the timing).
 
-import { dictionaryKey, wordsInLine } from './text.js';
+import { french } from './lang-fr.js';
+import { wordsInLine } from './text.js';
 
 function shuffle(items, random) {
   for (let i = items.length - 1; i > 0; i--) {
@@ -47,11 +48,13 @@ export function tally(words, cards, today) {
   return counts;
 }
 
-// The saved occurrence must be the word itself (not "j'" standing for "je"),
-// and the line must have something left once it is blanked out.
-function canGap(word) {
+// The saved occurrence must be the word itself (not "j'" standing for "je",
+// nor the "I" of "I'll"), and the line must have something left once it is
+// blanked out.
+function canGap(word, rules) {
   const shown = word.line.slice(word.start, word.end);
-  return dictionaryKey(shown.toLowerCase()) === word.key && word.line.trim().length > shown.length;
+  if (rules.standsAlone && !rules.standsAlone(word.line, word.start, word.end)) return false;
+  return rules.key(shown.toLowerCase()) === word.key && word.line.trim().length > shown.length;
 }
 
 /**
@@ -62,9 +65,10 @@ function canGap(word) {
  * correctly the two take turns, because producing a word is harder and
  * strengthens the memory more than recognising it.
  * @param {'mix'|'word'|'gap'} style
+ * @param {object} [rules]  the spelling rules of the language being learned
  */
-export function cardFace(word, card, style) {
-  if (style === 'word' || !canGap(word)) return 'word';
+export function cardFace(word, card, style, rules = french) {
+  if (style === 'word' || !canGap(word, rules)) return 'word';
   if (style === 'gap') return 'gap';
   if (!card || card.learning) return 'word';
   return card.reps % 2 === 1 ? 'gap' : 'word';
@@ -75,8 +79,8 @@ export function cardFace(word, card, style) {
  * so a repeat later in the line does not give the answer away.
  * @returns {{ text: string, gap: boolean }[]}
  */
-export function gapSegments(word) {
-  const repeats = wordsInLine(word.line, (key) => key === word.key).filter((hit) => !hit.elided);
+export function gapSegments(word, rules = french) {
+  const repeats = wordsInLine(word.line, (key) => key === word.key, rules).filter((hit) => !hit.elided);
   const starts = new Map([...repeats, word].map(({ start, end }) => [start, end]));
   const segments = [];
   let position = 0;
@@ -90,14 +94,13 @@ export function gapSegments(word) {
   return segments;
 }
 
-const tidy = (text) => dictionaryKey(text.trim().toLowerCase().replace(/[’‘ʼ]/g, "'"));
-const withoutAccents = (text) => tidy(text).normalize('NFD').replace(/\p{M}/gu, '');
-
 /**
  * Compare what was typed with the expected word.
  * @returns {'right'|'accents'|'wrong'}  'accents' = right letters, wrong or missing accents
  */
-export function checkAnswer(typed, answer) {
+export function checkAnswer(typed, answer, rules = french) {
+  const tidy = (text) => rules.key(text.trim().toLowerCase().replace(/[’‘ʼ]/g, "'"));
+  const withoutAccents = (text) => tidy(text).normalize('NFD').replace(/\p{M}/gu, '');
   if (tidy(typed) === tidy(answer)) return 'right';
   return withoutAccents(typed) === withoutAccents(answer) ? 'accents' : 'wrong';
 }

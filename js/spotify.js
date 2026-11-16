@@ -8,12 +8,13 @@
 // Docs: https://developer.spotify.com/documentation/web-api/tutorials/code-pkce-flow
 
 import { CONFIG } from './config.js';
+import { EDITION } from './edition.js';
 import { load, remove, save } from './storage.js';
 
 const AUTHORIZE_URL = 'https://accounts.spotify.com/authorize';
 const TOKEN_URL = 'https://accounts.spotify.com/api/token';
 const API = 'https://api.spotify.com/v1';
-const PENDING_KEY = 'wordnab.spotify.pending'; // sessionStorage: one login attempt
+const PENDING_KEY = `${EDITION.storagePrefix}spotify.pending`; // sessionStorage: one login attempt
 const TOKENS = 'spotify.tokens'; // localStorage: stay signed in between visits
 
 /** Thrown when the user has to connect (again) before Spotify will answer. */

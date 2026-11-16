@@ -13,6 +13,7 @@
 
 import { buildQueue, cardFace, checkAnswer, gapSegments, tally } from './deck.js';
 import { h, markedLine, setStatus, speakButton } from './dom.js';
+import { EDITION, LANGUAGES, LEARNING } from './edition.js';
 import * as speech from './speech.js';
 import { AGAIN, EASY, GOOD, HARD, dayNumber, review } from './srs.js';
 import { load, save } from './storage.js';
@@ -24,6 +25,7 @@ const PREFS = 'flashcards.v1';
 // A missed card comes back after this many others — long enough that it has
 // to be recalled rather than repeated.
 const REQUEUE_AFTER = 3;
+const GREETING = { fr: 'Bonjour', en: 'Hello' };
 const RATINGS = [
   [AGAIN, 'Again'],
   [HARD, 'Hard'],
@@ -41,13 +43,15 @@ const prefs = { newPerDay: 10, style: 'mix', speak: true, day: 0, introduced: 0,
 const $ = (id) => document.getElementById(id);
 let el;
 let deck = () => []; // the words to practise, supplied by the page
+let native = () => EDITION.natives[0]; // the language the meanings are shown in
 let session = { queue: [], word: null, face: 'word', revealed: false, result: null, typed: '', answered: 0 };
 
 /**
- * @param {{ deck: () => import('./words.js').SavedWord[], onClose: () => void }} options
+ * @param {{ deck: () => import('./words.js').SavedWord[], native: () => string, onClose: () => void }} options
  */
 export function init(options) {
   deck = options.deck;
+  native = options.native;
   el = {
     dialog: $('flashcards'),
     counts: $('flash-counts'),
@@ -82,7 +86,7 @@ export function init(options) {
   el.speak.addEventListener('change', () => updatePrefs({ speak: el.speak.checked }));
   el.voice.addEventListener('change', () => {
     speech.chooseVoice(el.voice.value);
-    speech.speak('Bonjour'); // a sample, so the choice can be heard
+    speech.speak(GREETING[EDITION.learn]); // a sample, so the choice can be heard
   });
   speech.onVoicesChanged(renderVoices);
   renderVoices();
@@ -133,7 +137,7 @@ function advance() {
   const word = session.queue.shift() ?? null;
   Object.assign(session, {
     word,
-    face: word ? cardFace(word, cards[word.key], prefs.style) : 'word',
+    face: word ? cardFace(word, cards[word.key], prefs.style, EDITION.rules) : 'word',
     revealed: false,
     result: null,
     typed: '',
@@ -146,7 +150,7 @@ function advance() {
 function reveal() {
   const typed = el.body.querySelector('.flash-input')?.value.trim() ?? '';
   session.typed = typed;
-  session.result = typed ? checkAnswer(typed, session.word.word) : null;
+  session.result = typed ? checkAnswer(typed, session.word.word, EDITION.rules) : null;
   session.revealed = true;
   render();
   if (prefs.speak && session.face === 'gap') pressSpeak('.flash-line .speak');
@@ -219,7 +223,7 @@ function wordFront(word) {
     'div',
     { class: 'flash-card' },
     h('p', { class: 'flash-prompt' }, 'What does it mean?'),
-    h('p', { class: 'flash-word' }, h('span', { lang: 'fr' }, word.word), speakButton(word.word)),
+    h('p', { class: 'flash-word' }, h('span', { lang: LEARNING.tag }, word.word), speakButton(word.word)),
     h('button', { class: 'button primary flash-show', type: 'button', onclick: reveal }, 'Show answer'),
   );
 }
@@ -228,7 +232,7 @@ function gapFront(word) {
   const input = h('input', {
     class: 'flash-input',
     type: 'text',
-    lang: 'fr',
+    lang: LEARNING.tag,
     autocomplete: 'off',
     autocapitalize: 'off',
     placeholder: 'Type it, or just think it',
@@ -247,10 +251,10 @@ function gapFront(word) {
     h('p', { class: 'flash-prompt' }, 'Which word is missing?'),
     h(
       'p',
-      { class: 'flash-line', lang: 'fr' },
-      gapSegments(word).map((part) => (part.gap ? h('span', { class: 'gap' }, ' ') : part.text)),
+      { class: 'flash-line', lang: LEARNING.tag },
+      gapSegments(word, EDITION.rules).map((part) => (part.gap ? h('span', { class: 'gap' }, ' ') : part.text)),
     ),
-    h('p', { class: 'flash-meaning' }, word.meaning),
+    h('p', { class: 'flash-meaning', lang: ownTag() }, word.meaning),
     word.note && h('p', { class: 'note' }, word.note),
     h('p', { class: 'song' }, songLabel(word)),
     input,
@@ -269,13 +273,13 @@ function cardBack(word) {
     'div',
     { class: 'flash-card' },
     session.result && h('p', { class: `flash-result ${session.result}` }, verdicts[session.result]),
-    h('p', { class: 'flash-word' }, h('span', { lang: 'fr' }, word.word), speakButton(word.word)),
-    h('p', { class: 'flash-meaning' }, word.meaning),
+    h('p', { class: 'flash-word' }, h('span', { lang: LEARNING.tag }, word.word), speakButton(word.word)),
+    h('p', { class: 'flash-meaning', lang: ownTag() }, word.meaning),
     word.note && h('p', { class: 'note' }, word.note),
-    word.also && h('p', { class: 'note' }, `also: ${word.also}`),
+    word.also && h('p', { class: 'note' }, 'also: ', h('span', { lang: ownTag() }, word.also)),
     h('p', { class: 'flash-line' }, markedLine(word), speakButton(word.line)),
     word.english
-      ? h('p', { class: 'line-en' }, word.english)
+      ? h('p', { class: 'line-en', lang: ownTag() }, word.english)
       : h('button', { class: 'link translate', type: 'button', onclick: translate }, 'Translate line'),
     h('p', { class: 'song' }, songLabel(word)),
     h(
@@ -329,18 +333,18 @@ async function translate(event) {
   button.disabled = true;
   button.textContent = 'Translating…';
   try {
-    setEnglish(word.line, await translateLine(word.line));
+    setEnglish(word.line, await translateLine(word.line, native()));
   } catch (error) {
     button.disabled = false;
     button.textContent = 'Translate line';
     setStatus(el.status, error.message, 'error');
     return;
   }
-  if (session.word === word && session.revealed) button.replaceWith(h('p', { class: 'line-en' }, word.english));
+  if (session.word === word && session.revealed) button.replaceWith(h('p', { class: 'line-en', lang: ownTag() }, word.english));
 }
 
 function renderVoices() {
-  const voices = speech.frenchVoices();
+  const voices = speech.voices();
   el.voiceRow.hidden = voices.length < 2;
   el.voice.replaceChildren(
     ...voices.map((voice) => h('option', { value: voice.voiceURI }, `${voice.name} (${voice.lang.replace('_', '-')})`)),
@@ -348,6 +352,9 @@ function renderVoices() {
   const current = speech.currentVoice();
   if (current) el.voice.value = current.voiceURI;
 }
+
+// Marking the language lets the browser pick the right font (Chinese above all).
+const ownTag = () => LANGUAGES[native()].tag;
 
 const songLabel = (word) => (word.artist ? `${word.song} — ${word.artist}` : word.song);
 

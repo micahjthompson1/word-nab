@@ -4,13 +4,13 @@
 // ("Common Word", "Translation"), so anything set up to import that file still
 // lines up. The song and lyric follow as extra columns.
 
-const HEADERS = ['Common Word', 'Translation', 'Song', 'Lyric', 'Lyric (English)'];
-
 /**
  * @param {import('./words.js').SavedWord[]} words
+ * @param {string} [language]  the language the lyric lines are translated into
  * @returns {string}
  */
-export function toCsv(words) {
+export function toCsv(words, language = 'English') {
+  const HEADERS = ['Common Word', 'Translation', 'Song', 'Lyric', `Lyric (${language})`];
   const rows = words.map((w) => [
     w.word,
     w.meaning,

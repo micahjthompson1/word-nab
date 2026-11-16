@@ -2,9 +2,10 @@
 //
 // It costs nothing and needs no server, account or audio files; with a voice
 // installed on the device it also works offline. How natural it sounds depends
-// on the voices the device has, so the best French one is picked automatically
-// and the user can choose another.
+// on the voices the device has, so the best one for the language being learned
+// is picked automatically and the user can choose another.
 
+import { LEARNING } from './edition.js';
 import { load, save } from './storage.js';
 
 const VOICE = 'voice.v1';
@@ -20,41 +21,44 @@ export const supported = Boolean(synth);
 let active = null;
 let cancelledAt = -Infinity;
 
-// macOS lists these joke voices under French too.
-const NOVELTY = /^(eddy|flo|grandma|grandpa|reed|rocko|sandy|shelley)\b/i;
+// macOS ships these joke voices, several of them in every language.
+const NOVELTY =
+  /^(eddy|flo|grandma|grandpa|reed|rocko|sandy|shelley|albert|bad news|bahh|bells|boing|bubbles|cellos|wobble|fred|good news|jester|junior|kathy|organ|ralph|superstar|trinoids|whisper|zarvox)\b/i;
 
 /**
- * How good a voice is for hearing French: higher is better, -Infinity for a
- * voice that is not French. A France accent comes first, then voice quality.
+ * How good a voice is for hearing the language: higher is better, -Infinity
+ * for a voice in another language. The standard accent (France for French,
+ * the United States for English) comes first, then voice quality.
  * @param {{ name: string, lang: string }} voice
+ * @param {string} [accent]  the preferred accent, such as "fr-FR"
  */
-export function voiceScore(voice) {
+export function voiceScore(voice, accent = LEARNING.speech) {
   const lang = voice.lang.replace('_', '-').toLowerCase();
-  if (!lang.startsWith('fr')) return -Infinity;
-  let score = lang === 'fr-fr' ? 30 : 0;
+  if (!lang.startsWith(accent.slice(0, 2).toLowerCase())) return -Infinity;
+  let score = lang === accent.toLowerCase() ? 30 : 0;
   if (/premium|enhanced|natural|neural/i.test(voice.name)) score += 20;
   else if (/google/i.test(voice.name)) score += 10;
   if (NOVELTY.test(voice.name)) score -= 50;
   return score;
 }
 
-/** The device's French voices, best first. Empty until the browser has loaded them. */
-export function frenchVoices() {
+/** The device's voices for the language being learned, best first. Empty until the browser has loaded them. */
+export function voices() {
   if (!synth) return [];
-  const french = synth
+  const usable = synth
     .getVoices()
     .filter((voice) => voiceScore(voice) > -Infinity)
     .sort((a, b) => voiceScore(b) - voiceScore(a));
   // Leave the joke voices out unless they are all there is.
-  const serious = french.filter((voice) => voiceScore(voice) >= 0);
-  return serious.length ? serious : french;
+  const serious = usable.filter((voice) => voiceScore(voice) >= 0);
+  return serious.length ? serious : usable;
 }
 
 /** The voice in use: the one the user chose, otherwise the best available. */
 export function currentVoice() {
-  const voices = frenchVoices();
+  const available = voices();
   const chosen = load(VOICE, '');
-  return voices.find((voice) => voice.voiceURI === chosen) ?? voices[0] ?? null;
+  return available.find((voice) => voice.voiceURI === chosen) ?? available[0] ?? null;
 }
 
 export function chooseVoice(voiceURI) {
@@ -78,10 +82,10 @@ export function stop() {
 }
 
 /**
- * Say French text aloud, replacing anything still being said.
+ * Say text aloud in the language being learned, replacing anything still being said.
  * @param {string} text
  * @param {() => void} [onDone]  called once when it ends or is interrupted
- * @returns {'ok'|'no-french-voice'|'unsupported'}
+ * @returns {'ok'|'no-voice'|'unsupported'}  'no-voice': the device has no voice for the language
  */
 export function speak(text, onDone = () => {}) {
   if (!synth) return 'unsupported';
@@ -89,7 +93,7 @@ export function speak(text, onDone = () => {}) {
 
   const voice = currentVoice();
   const utterance = new SpeechSynthesisUtterance(text);
-  utterance.lang = voice ? voice.lang.replace('_', '-') : 'fr-FR';
+  utterance.lang = voice ? voice.lang.replace('_', '-') : LEARNING.speech;
   if (voice) utterance.voice = voice;
   utterance.rate = RATE;
 
@@ -109,5 +113,5 @@ export function speak(text, onDone = () => {}) {
   else synth.speak(utterance);
 
   // An empty list means the voices have not loaded yet, not that none exist.
-  return voice || synth.getVoices().length === 0 ? 'ok' : 'no-french-voice';
+  return voice || synth.getVoices().length === 0 ? 'ok' : 'no-voice';
 }

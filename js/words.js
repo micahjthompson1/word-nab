@@ -12,16 +12,17 @@ const MAX_SONGS = 1000;
  * @typedef {object} SavedWord
  * @property {string} key      dictionary key; one entry per key
  * @property {string} word     the word as shown
- * @property {string} meaning  English meaning
+ * @property {string} meaning  meaning in the reader's language
  * @property {string} note     grammar hint ("verb · from être · present")
  * @property {string} also     second reading, or ''
- * @property {number} rank     1 = most common French word
+ * @property {number} rank     1 = most common word of the language
  * @property {string} song
  * @property {string} artist
  * @property {string} line     the lyric line the word was found in
  * @property {number} start    where the word sits in `line`
  * @property {number} end
- * @property {string} english  translation of `line`, or '' if not translated yet
+ * @property {string} english  translation of `line` into the reader's language, or '' if not
+ *   translated yet (named after the first version, which only translated into English)
  * @property {number} addedAt
  */
 
@@ -118,6 +119,21 @@ export function markSongDone(track) {
 /** Let previously removed words be offered again. */
 export function forgetRemoved() {
   removed = new Set();
+  persist();
+}
+
+/**
+ * Show every saved word in another language: look its meaning up again and
+ * swap the lyric translations for the ones known in that language.
+ * @param {(key: string) => { meaning: string, note: string, also: string }|null} lookup
+ * @param {(line: string) => string|undefined} translationOf
+ */
+export function changeLanguage(lookup, translationOf) {
+  for (const word of words) {
+    const info = lookup(word.key);
+    if (info) Object.assign(word, { meaning: info.meaning, note: info.note, also: info.also });
+    word.english = translationOf(word.line) ?? '';
+  }
   persist();
 }
 

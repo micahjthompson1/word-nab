@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en" data-edition="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>wordNab English</title>
+  <meta name="description" content="Learn common English words from the songs you play on Spotify, with meanings in Spanish, Chinese or Russian.">
+  <!-- Only this site's own files may run, and the page may only talk to the
+       services it uses. Keeps the Spotify sign-in safe from injected scripts. -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' https://*.scdn.co https://*.spotifycdn.com; connect-src 'self' https://accounts.spotify.com https://api.spotify.com https://lrclib.net https://api.lyrics.ovh https://api.mymemory.translated.net; base-uri 'none'; form-action 'none'">
+  <meta name="theme-color" content="#1565d8">
+  <link rel="icon" href="../img/favicon.png" type="image/png">
+  <link rel="stylesheet" href="../css/app.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="./">
+      <img src="../img/logo.png" alt="" width="48" height="48">
+      <span>
+        <span class="brand-name">wordNab <span class="brand-edition">English</span></span>
+        <span class="brand-tagline">English words from the songs you play</span>
+      </span>
+    </a>
+    <div class="topbar-side">
+      <label class="field">
+        <span>My language</span>
+        <select id="native" aria-describedby="native-help"></select>
+      </label>
+      <div class="account" id="account"></div>
+    </div>
+  </header>
+
+  <main>
+    <section class="panel" aria-labelledby="songs-heading">
+      <div class="panel-head">
+        <h2 id="songs-heading">Songs</h2>
+        <p class="panel-sub" id="native-help">Tick the songs to learn from. English ones are ticked for you. Meanings are shown in the language you choose above.</p>
+      </div>
+
+      <p class="status" id="songs-status" role="status"></p>
+      <ul class="tracks" id="tracks"></ul>
+
+      <div class="panel-actions">
+        <button class="button primary" id="add-words" type="button" disabled>Add words</button>
+        <form class="song-search" id="song-search">
+          <label class="visually-hidden" for="song-query">Find a song by title and artist</label>
+          <input id="song-query" type="search" placeholder="Or find any song: title and artist" autocomplete="off" required>
+          <button class="button" type="submit">Find</button>
+        </form>
+      </div>
+    </section>
+
+    <section class="panel" aria-labelledby="words-heading">
+      <div class="panel-head">
+        <h2 id="words-heading">My words <span class="count" id="word-count"></span></h2>
+        <div class="toolbar" id="toolbar">
+          <label>
+            <span>Sort</span>
+            <select id="sort">
+              <option value="recent">Newest first</option>
+              <option value="alpha">A–Z</option>
+              <option value="common">Most common first</option>
+              <option value="rare">Least common first</option>
+            </select>
+          </label>
+          <label>
+            <span>Hide basics</span>
+            <select id="hide">
+              <option value="0">Show every word</option>
+              <option value="100">Hide the 100 most common</option>
+              <option value="300">Hide the 300 most common</option>
+              <option value="1000">Hide the 1,000 most common</option>
+            </select>
+          </label>
+          <button class="button primary" id="flashcards-open" type="button" disabled>Flashcards</button>
+          <button class="button" id="translate-all" type="button">Translate all lines</button>
+          <button class="button" id="download-csv" type="button">Download CSV</button>
+          <button class="button quiet" id="clear-words" type="button">Clear list</button>
+        </div>
+      </div>
+
+      <p class="status" id="words-status" role="status"></p>
+
+      <div class="word-table" id="word-table" hidden>
+        <div class="word-header" aria-hidden="true">
+          <span>Word</span><span>Meaning</span><span>In the song</span><span></span>
+        </div>
+        <ul class="words" id="words"></ul>
+      </div>
+      <p class="empty" id="words-empty">
+        No words yet. Tick some songs above and press <strong>Add words</strong>.
+      </p>
+      <p class="removed-note" id="removed-note" hidden></p>
+    </section>
+  </main>
+
+  <footer class="credits">
+    <p>
+      Your word list is saved in this browser only. Lyrics from
+      <a href="https://lrclib.net" rel="noopener">LRCLIB</a> and
+      <a href="https://lyrics.ovh" rel="noopener">lyrics.ovh</a>. Word lists built from
+      <a href="https://github.com/hermitdave/FrequencyWords" rel="noopener">FrequencyWords</a> (OpenSubtitles),
+      <a href="https://github.com/en-wl/wordlist" rel="noopener">AGID</a>,
+      <a href="https://www.wikdict.com" rel="noopener">WikDict</a> / Wiktionary (CC BY-SA) and
+      <a href="https://github.com/skywind3000/ECDICT" rel="noopener">ECDICT</a>.
+      Line translations run on your device where the browser supports it, otherwise by
+      <a href="https://mymemory.translated.net" rel="noopener">MyMemory</a>.
+      Pronunciation uses an English voice built into your browser or device.
+    </p>
+  </footer>
+
+  <dialog class="flashcards" id="flashcards" aria-labelledby="flashcards-heading">
+    <header class="flash-head">
+      <h2 id="flashcards-heading">Flashcards</h2>
+      <p class="flash-counts" id="flash-counts"></p>
+      <button class="remove" id="flash-close" type="button" aria-label="Close flashcards" title="Close">×</button>
+    </header>
+    <div class="flash-body">
+      <p class="status" id="flash-status" role="status"></p>
+      <div id="flash-body"></div>
+    </div>
+    <details class="flash-options" id="flash-options">
+      <summary>Options and help</summary>
+      <div class="toolbar">
+        <label>
+          <span>New words a day</span>
+          <select id="flash-new">
+            <option value="5">5</option>
+            <option value="10">10</option>
+            <option value="20">20</option>
+          </select>
+        </label>
+        <label>
+          <span>Cards</span>
+          <select id="flash-style">
+            <option value="mix">Mix (recommended)</option>
+            <option value="word">English word → meaning</option>
+            <option value="gap">Fill the gap in the lyric</option>
+          </select>
+        </label>
+        <label id="flash-voice-row" hidden>
+          <span>Voice</span>
+          <select id="flash-voice"></select>
+        </label>
+        <label class="check"><input id="flash-speak" type="checkbox"> Say the cards aloud</label>
+      </div>
+      <p class="flash-help">
+        Try to answer from memory before you look. Then be honest:
+        <strong>Again</strong> if you did not know it, <strong>Hard</strong> if it took effort,
+        <strong>Good</strong> if you knew it, <strong>Easy</strong> if it was instant (keys 1–4).
+        Each word comes back just before you are likely to forget it, so a few minutes
+        a day is enough.
+      </p>
+    </details>
+  </dialog>
+
+  <div class="toast" id="toast" role="status" hidden></div>
+
+  <script type="module" src="../js/app.js"></script>
+</body>
+</html>

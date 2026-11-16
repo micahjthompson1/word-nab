@@ -4,6 +4,7 @@
 // nothing in this app builds HTML from strings — every node is created with
 // h(), which only ever sets text.
 
+import { LEARNING } from './edition.js';
 import * as speech from './speech.js';
 
 /** Create an element. Strings become text nodes, never HTML. */
@@ -29,11 +30,11 @@ export function setStatus(node, message, kind = '') {
 /** A saved word's lyric line with the word itself highlighted. */
 export function markedLine(word) {
   const { line, start, end } = word;
-  return h('span', { lang: 'fr' }, line.slice(0, start), h('mark', {}, line.slice(start, end)), line.slice(end));
+  return h('span', { lang: LEARNING.tag }, line.slice(0, start), h('mark', {}, line.slice(start, end)), line.slice(end));
 }
 
 /**
- * A speaker button that reads French text aloud. The click itself is handled
+ * A speaker button that reads a word or lyric line aloud. The click itself is handled
  * once for the whole page (see app.js), so the button only carries the text.
  * @returns {HTMLButtonElement|null} null when the browser cannot speak
  */
