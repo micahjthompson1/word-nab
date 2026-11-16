@@ -4,6 +4,7 @@ import { CONFIG } from './config.js';
 import { toCsv } from './csv.js';
 import { loadDictionary } from './dictionary.js';
 import { h, markedLine, setStatus, speakButton } from './dom.js';
+import { EDITION, LANGUAGES, LEARNING } from './edition.js';
 import * as flashcards from './flashcards.js';
 import { fetchLyrics, searchSongs } from './lyrics.js';
 import * as speech from './speech.js';
@@ -13,15 +14,16 @@ import { LANGUAGE_NAMES, detectLanguage, extractWords } from './text.js';
 import { TranslationQuotaError, cachedTranslation, translateLine } from './translate.js';
 import * as wordList from './words.js';
 
-// A song counts as French (and is ticked automatically) when at least this
-// share of its recognisable words are French. Low enough to catch songs that
-// switch between French and English.
-const FRENCH_SHARE = 0.3;
+// A song counts as being in the language learned (and is ticked
+// automatically) when at least this share of its recognisable words are in
+// it. Low enough to catch songs that switch between two languages.
+const LEARNING_SHARE = 0.3;
 const SWIPE_DELETE_PX = 90;
 
 const $ = (id) => document.getElementById(id);
 const el = {
   account: $('account'),
+  native: $('native'), // only on pages that offer a choice of language
   songsStatus: $('songs-status'),
   tracks: $('tracks'),
   addWords: $('add-words'),
@@ -59,7 +61,8 @@ const el = {
 const state = {
   /** @type {Track[]} */
   tracks: [],
-  prefs: { sort: 'recent', hide: 0, ...load('prefs.v1', {}) },
+  // `native` is the language the meanings are shown in.
+  prefs: { sort: 'recent', hide: 0, native: defaultNative(), ...load('prefs.v1', {}) },
   loadRun: 0, // bumped on every refresh so a slow, older load cannot overwrite a newer one
   translatingAll: false,
 };
@@ -73,10 +76,12 @@ async function start() {
     return;
   }
 
+  if (!EDITION.natives.includes(state.prefs.native)) state.prefs.native = defaultNative();
   el.sort.value = state.prefs.sort;
   el.hide.value = String(state.prefs.hide);
+  renderNativePicker();
   bindEvents();
-  flashcards.init({ deck: shownWords, onClose: renderWords });
+  flashcards.init({ deck: shownWords, native: () => state.prefs.native, onClose: renderWords });
   renderWords();
   renderTracks();
 
@@ -101,8 +106,43 @@ function bindEvents() {
   el.clearWords.addEventListener('click', clearWords);
   el.words.addEventListener('click', onWordClick);
   el.flashcardsOpen.addEventListener('click', flashcards.open);
+  el.native?.addEventListener('change', () => changeNative(el.native.value));
   document.addEventListener('click', onSpeakClick);
   enableSwipeToDelete(el.words);
+}
+
+// ---------------------------------------------------------------------------
+// The reader's own language
+
+// On a first visit, go by the browser's languages; otherwise the first on offer.
+function defaultNative() {
+  const preferred = (navigator.languages ?? []).map((tag) => tag.slice(0, 2).toLowerCase());
+  return preferred.find((code) => EDITION.natives.includes(code)) ?? EDITION.natives[0];
+}
+
+function renderNativePicker() {
+  if (!el.native) return;
+  el.native.replaceChildren(
+    ...EDITION.natives.map((code) => h('option', { value: code, lang: LANGUAGES[code].tag }, LANGUAGES[code].ownName)),
+  );
+  el.native.value = state.prefs.native;
+}
+
+// Show the saved words in another language. Their meanings come from that
+// language's word list; lyric lines keep any translation already made in it.
+async function changeNative(native) {
+  let dictionary;
+  try {
+    dictionary = await loadDictionary(native);
+  } catch (error) {
+    el.native.value = state.prefs.native;
+    setStatus(el.wordsStatus, error.message, 'error');
+    return;
+  }
+  state.translatingAll = false; // a run in the old language stops at its next line
+  wordList.changeLanguage(dictionary.get, (line) => cachedTranslation(line, native));
+  setStatus(el.wordsStatus, '');
+  updatePrefs({ native });
 }
 
 // ---------------------------------------------------------------------------
@@ -180,12 +220,13 @@ async function loadLyrics(run) {
 function applyLyrics(track, lyrics) {
   track.lyrics = lyrics;
   track.language = lyrics.status === 'found' ? detectLanguage(lyrics.text) : null;
-  // Tick French songs, except ones whose words were added on an earlier visit.
-  track.selected = hasFrench(track) && !wordList.isSongDone(track);
+  // Tick songs in the language being learned, except ones whose words were
+  // added on an earlier visit.
+  track.selected = isLearnable(track) && !wordList.isSongDone(track);
 }
 
-function hasFrench(track) {
-  return (track.language?.shares.fr ?? 0) >= FRENCH_SHARE;
+function isLearnable(track) {
+  return (track.language?.shares[EDITION.learn] ?? 0) >= LEARNING_SHARE;
 }
 
 async function onSongSearch(event) {
@@ -278,11 +319,11 @@ function trackBadge(track) {
   if (!primary) return { kind: 'other', text: 'Lyrics found' };
   // Name a second language when it makes up a real part of the song.
   const second = Object.keys(shares)
-    .filter((code) => code !== primary && shares[code] >= FRENCH_SHARE)
+    .filter((code) => code !== primary && shares[code] >= LEARNING_SHARE)
     .sort((a, b) => shares[b] - shares[a])[0];
   const text = [primary, second].filter(Boolean).map((code) => LANGUAGE_NAMES[code]).join(' + ');
   if (wordList.isSongDone(track)) return { kind: 'done', text: `${text} · added` };
-  return { kind: hasFrench(track) ? 'french' : 'other', text };
+  return { kind: isLearnable(track) ? 'match' : 'other', text };
 }
 
 function selectedTracks() {
@@ -303,7 +344,7 @@ async function addSelectedWords() {
   if (!tracks.length) return;
   let dictionary;
   try {
-    dictionary = await loadDictionary();
+    dictionary = await loadDictionary(state.prefs.native);
   } catch (error) {
     setStatus(el.wordsStatus, error.message, 'error');
     return;
@@ -312,13 +353,13 @@ async function addSelectedWords() {
   const now = Date.now();
   let added = 0;
   for (const track of tracks) {
-    const found = extractWords(track.lyrics.text, dictionary.has);
+    const found = extractWords(track.lyrics.text, dictionary.has, EDITION.rules);
     added += wordList.addWords(
       found.map((hit) => {
         const info = dictionary.get(hit.key);
         return {
           key: hit.key,
-          word: hit.display,
+          word: info.spelling ?? hit.display,
           meaning: info.meaning,
           note: info.note,
           also: info.also,
@@ -328,7 +369,7 @@ async function addSelectedWords() {
           line: hit.line,
           start: hit.start,
           end: hit.end,
-          english: cachedTranslation(hit.line) ?? '',
+          english: cachedTranslation(hit.line, state.prefs.native) ?? '',
         };
       }),
       now,
@@ -363,10 +404,10 @@ function shownWords() {
 /** The shown words in the chosen order — what the list and the CSV show. */
 function visibleWords() {
   const words = shownWords();
-  const french = new Intl.Collator('fr');
+  const alphabet = new Intl.Collator(EDITION.learn);
   const order = {
     recent: (a, b) => b.addedAt - a.addedAt,
-    alpha: (a, b) => french.compare(a.word, b.word),
+    alpha: (a, b) => alphabet.compare(a.word, b.word),
     common: (a, b) => a.rank - b.rank,
     rare: (a, b) => b.rank - a.rank,
   }[state.prefs.sort];
@@ -407,23 +448,25 @@ function renderWords() {
 }
 
 function wordRow(word) {
+  // Marking the language lets the browser pick the right font (Chinese above all).
+  const own = LANGUAGES[state.prefs.native].tag;
   return h(
     'li',
     { class: 'word', dataset: { key: word.key } },
-    h('div', { class: 'word-fr' }, h('span', { lang: 'fr' }, word.word), speakButton(word.word)),
+    h('div', { class: 'word-fr' }, h('span', { lang: LEARNING.tag }, word.word), speakButton(word.word)),
     h(
       'div',
       { class: 'word-meaning' },
-      h('span', { class: 'meaning' }, word.meaning),
+      h('span', { class: 'meaning', lang: own }, word.meaning),
       word.note && h('span', { class: 'note' }, word.note),
-      word.also && h('span', { class: 'note' }, `also: ${word.also}`),
+      word.also && h('span', { class: 'note' }, 'also: ', h('span', { lang: own }, word.also)),
     ),
     h(
       'div',
       { class: 'word-context' },
       h('p', { class: 'line-fr' }, markedLine(word), speakButton(word.line)),
       word.english
-        ? h('p', { class: 'line-en' }, word.english)
+        ? h('p', { class: 'line-en', lang: own }, word.english)
         : h('button', { class: 'link translate', type: 'button' }, 'Translate line'),
       h('p', { class: 'song' }, word.artist ? `${word.song} — ${word.artist}` : word.song),
     ),
@@ -449,12 +492,12 @@ function onSpeakClick(event) {
   }
   button.classList.add('speaking');
   const outcome = speech.speak(button.dataset.speak, () => button.classList.remove('speaking'));
-  if (outcome === 'no-french-voice' && !warnedNoVoice) {
+  if (outcome === 'no-voice' && !warnedNoVoice) {
     warnedNoVoice = true;
     const status = button.closest('dialog')?.querySelector('.status') ?? el.wordsStatus;
     setStatus(
       status,
-      'This device has no French voice installed, so words may be read with the wrong accent. You can add one in your system’s speech settings.',
+      `This device has no ${LEARNING.name} voice installed, so words may be read with the wrong accent. You can add one in your system’s speech settings.`,
       'warn',
     );
   }
@@ -498,8 +541,11 @@ async function translateRow(row, button) {
   if (!word) return;
   button.disabled = true;
   button.textContent = 'Translating…';
+  const { native } = state.prefs;
   try {
-    wordList.setEnglish(word.line, await translateLine(word.line));
+    const translated = await translateLine(word.line, native);
+    if (native !== state.prefs.native) return; // the language was changed while waiting
+    wordList.setEnglish(word.line, translated);
     setStatus(el.wordsStatus, '');
     renderWords();
   } catch (error) {
@@ -519,13 +565,16 @@ async function translateAllLines() {
   const lines = [...new Set(visibleWords().filter((word) => !word.english).map((word) => word.line))];
   if (!lines.length) return;
   state.translatingAll = true;
+  const { native } = state.prefs;
   let done = 0;
   let failure = null;
   for (const line of lines) {
     if (!state.translatingAll) break;
     el.translateAll.textContent = `Stop (${done} of ${lines.length})`;
     try {
-      wordList.setEnglish(line, await translateLine(line));
+      const translated = await translateLine(line, native);
+      if (native !== state.prefs.native) break; // the language was changed while waiting
+      wordList.setEnglish(line, translated);
       done++;
     } catch (error) {
       failure = error;
@@ -550,7 +599,7 @@ function downloadCsv() {
   const words = visibleWords();
   if (!words.length) return;
   // The BOM makes Excel read the accents correctly.
-  const blob = new Blob(['﻿', toCsv(words)], { type: 'text/csv;charset=utf-8' });
+  const blob = new Blob(['﻿', toCsv(words, LANGUAGES[state.prefs.native].name)], { type: 'text/csv;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const link = h('a', { href: url, download: 'word-data.csv' });
   document.body.append(link);

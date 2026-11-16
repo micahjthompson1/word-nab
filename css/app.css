@@ -96,6 +96,11 @@ main,
   letter-spacing: -0.01em;
 }
 
+.brand-edition {
+  color: var(--accent);
+  font-style: italic;
+}
+
 .brand-tagline {
   display: block;
   color: var(--muted);
@@ -105,6 +110,14 @@ main,
 .account {
   display: flex;
   gap: 8px;
+}
+
+/* The header's right-hand side when it also holds the language picker. */
+.topbar-side {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 12px;
 }
 
 /* ---- buttons and inputs ---- */
@@ -323,7 +336,8 @@ h2 {
   white-space: nowrap;
 }
 
-.badge.french {
+/* A song in the language being learned. */
+.badge.match {
   background: var(--accent-soft);
   border-color: transparent;
   color: var(--accent);
@@ -369,7 +383,8 @@ h2 {
   gap: 8px;
 }
 
-.toolbar label {
+.toolbar label,
+.field {
   display: grid;
   gap: 2px;
   min-width: 0;
@@ -380,7 +395,8 @@ h2 {
   min-width: 0;
 }
 
-.toolbar label span {
+.toolbar label span,
+.field span {
   color: var(--muted);
   font-size: 0.75rem;
   text-transform: uppercase;

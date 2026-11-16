@@ -4,14 +4,12 @@
 //
 // This replaces two things the old server did: the SQL lookup in
 // /api/match-words and the Google Translate call in /api/detect-language.
+//
+// What counts as a word differs by language ("j'ai" in French, "don't" in
+// English), so the functions take that language's rules (lang-fr.js,
+// lang-en.js). French is the default.
 
-// "j'ai" is "je" + "ai". The elided half is expanded to the full word so the
-// learner sees a real vocabulary item.
-const ELISIONS = {
-  l: 'le', d: 'de', n: 'ne', t: 'te', s: 'se', m: 'me', j: 'je', c: 'ce', qu: 'que',
-  jusqu: 'jusque', lorsqu: 'lorsque', puisqu: 'puisque', quoiqu: 'quoique',
-  quelqu: 'quelque', presqu: 'presque',
-};
+import { french } from './lang-fr.js';
 
 const WORD = /\p{L}+(?:['’‘ʼ-]\p{L}+)*/gu;
 
@@ -21,67 +19,48 @@ function fold(text) {
   return text.toLowerCase().replace(/[’‘ʼ]/g, "'");
 }
 
-// The word list spells "cœur" as "coeur"; lyrics use either.
-export function dictionaryKey(word) {
-  return word.replaceAll('œ', 'oe').replaceAll('æ', 'ae');
-}
-
 /**
  * Split one lyric line into the dictionary words it contains.
  * @param {string} line
  * @param {(key: string) => boolean} has  true if the key is in the dictionary
+ * @param {object} [rules]  the spelling rules of the lyric's language
  * @returns {{ key: string, start: number, end: number, elided: boolean }[]}
+ *   `elided` marks a word the lyric writes differently ("j'" for "je", "n't" for "not")
  */
-export function wordsInLine(line, has) {
-  const known = (word) => has(dictionaryKey(word));
+export function wordsInLine(line, has, rules = french) {
+  const known = (word) => has(rules.key(word));
   const found = [];
   for (const match of line.matchAll(WORD)) {
     const token = fold(match[0]);
     const base = match.index;
-    if (known(token)) {
-      found.push({ key: dictionaryKey(token), start: base, end: base + token.length, elided: false });
+    // A hyphenated dictionary word ("peut-être") is one word. Anything else
+    // is looked at piece by piece ("dis-moi").
+    if (token.includes('-') && known(token)) {
+      found.push({ key: rules.key(token), start: base, end: base + token.length, elided: false });
       continue;
     }
-    // Not a word as a whole ("dis-moi", "qu'il"): look at the parts.
     let offset = 0;
     for (const part of token.split('-')) {
-      resolvePart(part, base + offset, known, found);
+      rules.resolve(part, base + offset, known, found, line);
       offset += part.length + 1;
     }
   }
   return found;
 }
 
-function resolvePart(part, start, known, found) {
-  if (!part) return;
-  if (known(part)) {
-    found.push({ key: dictionaryKey(part), start, end: start + part.length, elided: false });
-    return;
-  }
-  const apostrophe = part.indexOf("'");
-  if (apostrophe === -1) return;
-  const head = part.slice(0, apostrophe);
-  const full = ELISIONS[head];
-  if (full && known(full)) {
-    found.push({ key: full, start, end: start + apostrophe + 1, elided: true });
-  } else if (!full && known(head)) {
-    found.push({ key: dictionaryKey(head), start, end: start + apostrophe, elided: false });
-  }
-  resolvePart(part.slice(apostrophe + 1), start + apostrophe + 1, known, found);
-}
-
 /**
  * Every dictionary word in a song, with the first line it appears in.
  * @param {string} lyrics
  * @param {(key: string) => boolean} has
+ * @param {object} [rules]  the spelling rules of the lyric's language
  * @returns {{ key: string, display: string, line: string, start: number, end: number, count: number }[]}
  *   in order of first appearance
  */
-export function extractWords(lyrics, has) {
+export function extractWords(lyrics, has, rules = french) {
   const words = new Map();
   for (const line of cleanLines(lyrics)) {
-    if (looksForeign(line)) continue;
-    for (const hit of wordsInLine(line, has)) {
+    if (looksForeign(line, rules.code)) continue;
+    for (const hit of wordsInLine(line, has, rules)) {
       const seen = words.get(hit.key);
       if (seen) {
         seen.count++;
@@ -89,8 +68,8 @@ export function extractWords(lyrics, has) {
       }
       words.set(hit.key, {
         key: hit.key,
-        // What the learner should memorise: the full word for an elision,
-        // otherwise the spelling used in the song.
+        // What the learner should memorise: the full word for an elision or
+        // contraction, otherwise the spelling used in the song.
         display: hit.elided ? hit.key : fold(line.slice(hit.start, hit.end)),
         line,
         start: hit.start,
@@ -171,11 +150,11 @@ export function detectLanguage(text) {
   return { primary, shares };
 }
 
-// A line with clear signs of another language and none of French, such as the
-// English hook in a French song. Skipping it avoids "learning" that English
-// "on" or "a" are French words.
-function looksForeign(line) {
+// A line with clear signs of another language and none of the one being
+// learned, such as the English hook in a French song. Skipping it avoids
+// "learning" that English "on" or "a" are French words.
+function looksForeign(line, learning) {
   const counts = countMarkers(line);
-  const other = Object.entries(counts).reduce((sum, [language, n]) => (language === 'fr' ? sum : sum + n), 0);
-  return !counts.fr && other >= 2;
+  const other = Object.entries(counts).reduce((sum, [language, n]) => (language === learning ? sum : sum + n), 0);
+  return !counts[learning] && other >= 2;
 }

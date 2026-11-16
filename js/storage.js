@@ -2,7 +2,11 @@
 // browser — there is no database — so reads and writes must never throw, even
 // in private windows or when storage is full.
 
-const PREFIX = 'wordnab.';
+import { EDITION } from './edition.js';
+
+// Each version of the app keeps its own saved words ("wordnab." for the
+// French one, "wordnab.en." for the English one).
+const PREFIX = EDITION.storagePrefix;
 
 export function load(name, fallback) {
   try {
