@@ -53,32 +53,40 @@ export function wordsInLine(line, has, rules = french) {
  * @param {string} lyrics
  * @param {(key: string) => boolean} has
  * @param {object} [rules]  the spelling rules of the lyric's language
- * @returns {{ key: string, display: string, line: string, start: number, end: number, count: number }[]}
+ * @param {(hit: { key: string, start: number, end: number }, line: string) => string[]} [tag]
+ *   optional: the jobs one use of a word does in its line (see functions-fr.js).
+ *   Every use is judged and the results are pooled in `tags`; the line kept as
+ *   the example is the first one that shows the most of them, so "viens" is
+ *   shown in "Viens avec moi" rather than in an earlier "Tu viens ?".
+ * @returns {{ key: string, display: string, line: string, start: number, end: number, count: number, tags: string[] }[]}
  *   in order of first appearance
  */
-export function extractWords(lyrics, has, rules = french) {
+export function extractWords(lyrics, has, rules = french, tag = () => []) {
   const words = new Map();
   for (const line of cleanLines(lyrics)) {
     if (looksForeign(line, rules.code)) continue;
     for (const hit of wordsInLine(line, has, rules)) {
-      const seen = words.get(hit.key);
-      if (seen) {
-        seen.count++;
-        continue;
-      }
-      words.set(hit.key, {
-        key: hit.key,
+      const tags = tag(hit, line);
+      const occurrence = {
         // What the learner should memorise: the full word for an elision or
         // contraction, otherwise the spelling used in the song.
         display: hit.elided ? hit.key : fold(line.slice(hit.start, hit.end)),
         line,
         start: hit.start,
         end: hit.end,
-        count: 1,
-      });
+        lineTags: tags,
+      };
+      const seen = words.get(hit.key);
+      if (!seen) {
+        words.set(hit.key, { key: hit.key, ...occurrence, count: 1, tags: new Set(tags) });
+        continue;
+      }
+      seen.count++;
+      tags.forEach((t) => seen.tags.add(t));
+      if (tags.length > seen.lineTags.length) Object.assign(seen, occurrence);
     }
   }
-  return [...words.values()];
+  return [...words.values()].map(({ lineTags, tags, ...word }) => ({ ...word, tags: [...tags] }));
 }
 
 /** Lyric lines worth reading: trimmed, no blanks, no "[Refrain]" markers. */

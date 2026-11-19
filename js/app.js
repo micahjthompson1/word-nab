@@ -37,6 +37,8 @@ const el = {
   downloadCsv: $('download-csv'),
   clearWords: $('clear-words'),
   wordsStatus: $('words-status'),
+  lists: $('lists'), // only on pages that sort words by language function
+  listHint: $('list-hint'),
   wordTable: $('word-table'),
   words: $('words'),
   wordsEmpty: $('words-empty'),
@@ -62,10 +64,14 @@ const state = {
   /** @type {Track[]} */
   tracks: [],
   // `native` is the language the meanings are shown in.
-  prefs: { sort: 'recent', hide: 0, native: defaultNative(), ...load('prefs.v1', {}) },
+  // `list` is the language-function list being shown ('all', 'other' or a FUNCTIONS id).
+  prefs: { sort: 'recent', hide: 0, list: 'all', native: defaultNative(), ...load('prefs.v1', {}) },
   loadRun: 0, // bumped on every refresh so a slow, older load cannot overwrite a newer one
   translatingAll: false,
 };
+
+// Names of the word lists by language function (French version only), by id.
+const LIST_NAMES = Object.fromEntries((EDITION.functions?.list ?? []).map((f) => [f.id, f.name]));
 
 start();
 
@@ -77,6 +83,7 @@ async function start() {
   }
 
   if (!EDITION.natives.includes(state.prefs.native)) state.prefs.native = defaultNative();
+  if (!listIds().includes(state.prefs.list)) state.prefs.list = 'all';
   el.sort.value = state.prefs.sort;
   el.hide.value = String(state.prefs.hide);
   renderNativePicker();
@@ -84,6 +91,7 @@ async function start() {
   flashcards.init({ deck: shownWords, native: () => state.prefs.native, onClose: renderWords });
   renderWords();
   renderTracks();
+  sortSavedWords();
 
   try {
     await spotify.completeLogin();
@@ -107,6 +115,7 @@ function bindEvents() {
   el.words.addEventListener('click', onWordClick);
   el.flashcardsOpen.addEventListener('click', flashcards.open);
   el.native?.addEventListener('change', () => changeNative(el.native.value));
+  el.lists?.addEventListener('click', onListClick);
   document.addEventListener('click', onSpeakClick);
   enableSwipeToDelete(el.words);
 }
@@ -353,7 +362,7 @@ async function addSelectedWords() {
   const now = Date.now();
   let added = 0;
   for (const track of tracks) {
-    const found = extractWords(track.lyrics.text, dictionary.has, EDITION.rules);
+    const found = extractWords(track.lyrics.text, dictionary.has, EDITION.rules, tagger(dictionary));
     added += wordList.addWords(
       found.map((hit) => {
         const info = dictionary.get(hit.key);
@@ -370,6 +379,7 @@ async function addSelectedWords() {
           start: hit.start,
           end: hit.end,
           english: cachedTranslation(hit.line, state.prefs.native) ?? '',
+          ...(EDITION.functions && { functions: hit.tags }),
         };
       }),
       now,
@@ -396,9 +406,78 @@ function updatePrefs(change) {
   renderWords();
 }
 
-/** The saved words minus those hidden by "Hide basics" — also what the flashcards practise. */
+/**
+ * The saved words in the chosen list, minus those hidden by "Hide basics" —
+ * also what the flashcards practise.
+ */
 function shownWords() {
-  return wordList.allWords().filter((word) => word.rank > state.prefs.hide);
+  return wordList.allWords().filter((word) => word.rank > state.prefs.hide && inList(word, state.prefs.list));
+}
+
+// ---------------------------------------------------------------------------
+// Lists by language function (French version only): what a word does in a
+// song — expresses a feeling, tells a story, describes, gives an order, or
+// keeps the conversation going. A word can be in several lists.
+
+function listIds() {
+  return EDITION.functions ? ['all', ...EDITION.functions.list.map((f) => f.id), 'other'] : ['all'];
+}
+
+function inList(word, list) {
+  if (list === 'all') return true;
+  const functions = word.functions ?? [];
+  return list === 'other' ? functions.length === 0 : functions.includes(list);
+}
+
+/** extractWords' tagger: what one use of a word does in its line. */
+function tagger(dictionary) {
+  if (!EDITION.functions) return undefined;
+  return (hit, line) => EDITION.functions.classify(hit.key, dictionary.get(hit.key)?.readings ?? [], line, hit.start, hit.end);
+}
+
+// Words saved before the lists existed are sorted from the line they were saved with.
+async function sortSavedWords() {
+  if (!EDITION.functions || wordList.allWords().every((word) => Array.isArray(word.functions))) return;
+  let dictionary;
+  try {
+    dictionary = await loadDictionary(state.prefs.native);
+  } catch {
+    return; // tried again on the next visit
+  }
+  const tag = tagger(dictionary);
+  const sorted = wordList.sortUnsorted((word) => (dictionary.has(word.key) ? tag(word, word.line) : null));
+  if (sorted) renderWords();
+}
+
+function onListClick(event) {
+  const button = event.target.closest('[data-list]');
+  if (button) updatePrefs({ list: button.dataset.list });
+}
+
+function renderLists() {
+  if (!el.lists) return;
+  const total = wordList.allWords().length;
+  el.lists.hidden = total === 0;
+  el.listHint.hidden = true;
+  if (!total) return;
+  const basics = wordList.allWords().filter((word) => word.rank > state.prefs.hide);
+  const name = (id) => ({ all: 'All words', other: 'Other words' })[id] ?? LIST_NAMES[id];
+  el.lists.replaceChildren(
+    ...listIds().map((id) =>
+      h(
+        'button',
+        { class: 'list-tab', type: 'button', dataset: { list: id }, 'aria-pressed': String(id === state.prefs.list) },
+        name(id),
+        h('span', { class: 'list-count' }, String(basics.filter((word) => inList(word, id)).length)),
+      ),
+    ),
+  );
+  const hint =
+    state.prefs.list === 'other'
+      ? 'Words that are not in any of the five lists: mostly nouns and the small grammar words.'
+      : EDITION.functions.list.find((f) => f.id === state.prefs.list)?.hint;
+  el.listHint.hidden = !hint;
+  el.listHint.textContent = hint ?? '';
 }
 
 /** The shown words in the chosen order — what the list and the CSV show. */
@@ -422,7 +501,11 @@ function renderWords() {
   el.words.replaceChildren(...words.map(wordRow));
   el.wordTable.hidden = words.length === 0;
   el.wordsEmpty.hidden = words.length > 0;
-  if (total && !words.length) {
+  renderLists();
+  const listName = LIST_NAMES[state.prefs.list] ?? (state.prefs.list === 'other' ? 'Other words' : '');
+  if (total && !words.length && state.prefs.list !== 'all') {
+    el.wordsEmpty.textContent = `None of your words are in the ${listName} list yet${state.prefs.hide ? ' (with “Hide basics” on)' : ''}.`;
+  } else if (total && !words.length) {
     el.wordsEmpty.textContent = `All ${total} saved words are hidden by “Hide basics”.`;
   } else if (!total) {
     el.wordsEmpty.replaceChildren('No words yet. Tick some songs above and press ', h('strong', {}, 'Add words'), '.');
@@ -460,6 +543,14 @@ function wordRow(word) {
       h('span', { class: 'meaning', lang: own }, word.meaning),
       word.note && h('span', { class: 'note' }, word.note),
       word.also && h('span', { class: 'note' }, 'also: ', h('span', { lang: own }, word.also)),
+      word.functions?.length > 0 &&
+        h(
+          'span',
+          { class: 'tags' },
+          word.functions.map((id) =>
+            h('button', { class: `tag tag-${id}`, type: 'button', title: `Show the ${LIST_NAMES[id]} list`, dataset: { list: id } }, LIST_NAMES[id]),
+          ),
+        ),
     ),
     h(
       'div',
@@ -477,7 +568,11 @@ function wordRow(word) {
 function onWordClick(event) {
   const row = event.target.closest('.word');
   if (!row) return;
-  if (event.target.closest('.remove')) removeWord(row);
+  const tag = event.target.closest('.tag');
+  if (tag) {
+    updatePrefs({ list: tag.dataset.list });
+    $('words-heading').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  } else if (event.target.closest('.remove')) removeWord(row);
   else if (event.target.closest('.translate')) translateRow(row, event.target.closest('.translate'));
 }
 
@@ -599,7 +694,7 @@ function downloadCsv() {
   const words = visibleWords();
   if (!words.length) return;
   // The BOM makes Excel read the accents correctly.
-  const blob = new Blob(['﻿', toCsv(words, LANGUAGES[state.prefs.native].name)], { type: 'text/csv;charset=utf-8' });
+  const blob = new Blob(['﻿', toCsv(words, LANGUAGES[state.prefs.native].name, EDITION.functions && LIST_NAMES)], { type: 'text/csv;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const link = h('a', { href: url, download: 'word-data.csv' });
   document.body.append(link);

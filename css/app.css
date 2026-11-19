@@ -16,6 +16,17 @@
   --danger-soft: #fde8e6;
   --warn: #8a5a00;
   --ok: #1a7f37;
+  /* the five word lists (language functions) */
+  --fn-expressive: #b4235a;
+  --fn-expressive-soft: #fde7ef;
+  --fn-narrate: #8a5a00;
+  --fn-narrate-soft: #fdf1d8;
+  --fn-describe: #1a7f37;
+  --fn-describe-soft: #e3f5e8;
+  --fn-directive: #1565d8;
+  --fn-directive-soft: #e4eeff;
+  --fn-phatic: #6b3fb8;
+  --fn-phatic-soft: #efe8fb;
   --serif: 'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, serif;
   --sans: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
 }
@@ -36,6 +47,16 @@
     --danger-soft: #3a1512;
     --warn: #f0c060;
     --ok: #6fdc8c;
+    --fn-expressive: #ff8fb8;
+    --fn-expressive-soft: #3a1426;
+    --fn-narrate: #f0c060;
+    --fn-narrate-soft: #33260a;
+    --fn-describe: #6fdc8c;
+    --fn-describe-soft: #0f2e1a;
+    --fn-directive: #6aaeff;
+    --fn-directive-soft: #16294a;
+    --fn-phatic: #c3a4ff;
+    --fn-phatic-soft: #261a40;
   }
 }
 
@@ -463,6 +484,75 @@ h2 {
 .word-context p {
   margin: 0;
 }
+
+/* ---- lists by language function ---- */
+.lists {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 4px 0 8px;
+}
+
+.list-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 2.25rem;
+  padding: 4px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.list-tab:hover {
+  border-color: var(--accent);
+}
+
+.list-tab[aria-pressed='true'] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+
+.list-count {
+  font-size: 0.8rem;
+  opacity: 0.75;
+  font-variant-numeric: tabular-nums;
+}
+
+.list-hint {
+  margin: 0 0 10px;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.tag {
+  padding: 1px 8px;
+  border: 0;
+  border-radius: 999px;
+  font: 600 0.72rem/1.6 var(--sans);
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  color: var(--muted);
+  background: var(--bg);
+}
+
+.tag-expressive { color: var(--fn-expressive); background: var(--fn-expressive-soft); }
+.tag-narrate { color: var(--fn-narrate); background: var(--fn-narrate-soft); }
+.tag-describe { color: var(--fn-describe); background: var(--fn-describe-soft); }
+.tag-directive { color: var(--fn-directive); background: var(--fn-directive-soft); }
+.tag-phatic { color: var(--fn-phatic); background: var(--fn-phatic-soft); }
 
 .line-fr {
   font-family: var(--serif);

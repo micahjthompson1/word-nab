@@ -8,6 +8,7 @@
 // (and under `node --test`) it is the French one.
 
 import { english } from './lang-en.js';
+import { frenchFunctions } from './functions-fr.js';
 import { french } from './lang-fr.js';
 
 /**
@@ -18,6 +19,8 @@ import { french } from './lang-fr.js';
  * @property {string[]} natives languages the meanings can be shown in; the first is the default
  * @property {string} storagePrefix  keeps each version's saved words apart in the browser
  * @property {(native: string) => string} wordList  the word-list file, relative to the site root
+ * @property {{ list: { id: string, name: string, hint: string }[], classify: Function }|null} functions
+ *   sorts words into lists by what they do in a song (expressive, narrate, …); null where not offered
  */
 
 /** @type {Record<string, Edition>} */
@@ -29,6 +32,7 @@ const EDITIONS = {
     natives: ['en'],
     storagePrefix: 'wordnab.',
     wordList: () => 'data/words.fr.json',
+    functions: frenchFunctions,
   },
   en: {
     id: 'en',
@@ -37,6 +41,7 @@ const EDITIONS = {
     natives: ['es', 'zh', 'ru'],
     storagePrefix: 'wordnab.en.',
     wordList: (native) => `data/words.en-${native}.json`,
+    functions: null,
   },
 };
 
