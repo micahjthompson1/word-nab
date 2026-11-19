@@ -930,3 +930,117 @@ mark {
     transition: none;
   }
 }
+
+/* ---- phrases ---- */
+
+.track {
+  display: flex;
+  align-items: center;
+}
+
+.track label {
+  flex: 1;
+  min-width: 0;
+}
+
+.lyrics-open {
+  flex: none;
+  margin-right: 4px;
+  padding-inline: 10px;
+}
+
+.word.phrase .word-fr {
+  font-size: 1.1rem;
+}
+
+.lyrics .flash-body {
+  display: block;
+  align-content: start;
+  min-height: 12rem;
+}
+
+.lyrics-help {
+  margin: 0 0 10px;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.known-sample,
+.lw.known {
+  text-decoration: underline dotted var(--accent);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 4px;
+}
+
+.lyric-line {
+  margin: 0;
+  padding: 2px 0;
+  font: 1.08rem/1.7 var(--serif);
+}
+
+.lw {
+  padding: 1px 1px;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.lw:hover {
+  background: var(--accent-soft);
+}
+
+.lw.picked {
+  background: var(--mark);
+  color: var(--mark-ink);
+}
+
+.phrase-picker {
+  display: grid;
+  gap: 8px;
+  padding: 12px 20px 16px;
+  border-top: 1px solid var(--line);
+}
+
+.phrase-picker p {
+  margin: 0;
+}
+
+.pick-text {
+  font: 600 1.2rem/1.3 var(--serif);
+}
+
+.pick-hint {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.pick-hint:empty {
+  display: none;
+}
+
+.pick-lists {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.pick-list {
+  padding: 3px 10px;
+  font-size: 0.8rem;
+  opacity: 0.55;
+  outline: 1px dashed currentColor;
+  outline-offset: -1px;
+}
+
+.pick-list[aria-pressed='true'] {
+  opacity: 1;
+  outline: none;
+}
+
+.pick-actions {
+  display: flex;
+  gap: 8px;
+}

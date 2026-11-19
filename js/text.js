@@ -161,7 +161,7 @@ export function detectLanguage(text) {
 // A line with clear signs of another language and none of the one being
 // learned, such as the English hook in a French song. Skipping it avoids
 // "learning" that English "on" or "a" are French words.
-function looksForeign(line, learning) {
+export function looksForeign(line, learning) {
   const counts = countMarkers(line);
   const other = Object.entries(counts).reduce((sum, [language, n]) => (language === learning ? sum : sum + n), 0);
   return !counts[learning] && other >= 2;

@@ -28,7 +28,7 @@
     <section class="panel" aria-labelledby="songs-heading">
       <div class="panel-head">
         <h2 id="songs-heading">Songs</h2>
-        <p class="panel-sub">Tick the songs to learn from. French ones are ticked for you.</p>
+        <p class="panel-sub">Tick the songs to learn from. French ones are ticked for you. Press <strong>Lyrics</strong> to pick phrases.</p>
       </div>
 
       <p class="status" id="songs-status" role="status"></p>
@@ -55,6 +55,14 @@
               <option value="alpha">A–Z</option>
               <option value="common">Most common first</option>
               <option value="rare">Least common first</option>
+            </select>
+          </label>
+          <label>
+            <span>Show</span>
+            <select id="kind">
+              <option value="all">Words and phrases</option>
+              <option value="words">Words only</option>
+              <option value="phrases">Phrases only</option>
             </select>
           </label>
           <label>
@@ -147,6 +155,34 @@
         a day is enough.
       </p>
     </details>
+  </dialog>
+
+  <dialog class="flashcards lyrics" id="lyrics" aria-labelledby="lyrics-heading">
+    <header class="flash-head">
+      <h2 id="lyrics-heading">Lyrics</h2>
+      <p class="flash-counts" id="lyrics-song"></p>
+      <button class="remove" id="lyrics-close" type="button" aria-label="Close lyrics" title="Close">×</button>
+    </header>
+    <div class="flash-body">
+      <p class="lyrics-help">
+        Tap the first and the last word of a phrase to pick it.
+        <span class="known-sample">Underlined</span> phrases are in the built-in list
+        and are saved with the song’s words.
+      </p>
+      <p class="status" id="pick-status" role="status"></p>
+      <div class="lyric-lines" id="lyric-lines"></div>
+    </div>
+    <form class="phrase-picker" id="phrase-picker" hidden>
+      <p class="pick-text" id="pick-text" lang="fr"></p>
+      <p class="pick-hint" id="pick-hint"></p>
+      <div class="pick-lists" id="pick-lists" role="group" aria-label="Lists for this phrase"></div>
+      <label class="visually-hidden" for="pick-meaning">Meaning</label>
+      <input id="pick-meaning" type="text" autocomplete="off">
+      <div class="pick-actions">
+        <button class="button primary" id="pick-save" type="submit">Save phrase</button>
+        <button class="button quiet" id="pick-cancel" type="button">Cancel</button>
+      </div>
+    </form>
   </dialog>
 
   <div class="toast" id="toast" role="status" hidden></div>

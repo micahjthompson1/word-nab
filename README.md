@@ -185,6 +185,31 @@ that carries on a sentence from the line before can make a verb look like an
 order (*Et le soleil / brille*), and a word only gets the jobs it does in the
 songs you added.
 
+## Phrases (French version)
+
+Besides single words, the French page saves phrases, in two ways:
+
+- **A built-in list** of about 130 set expressions that mean more than their
+  words — *tu me manques* ("I miss you"), *il était une fois*, *ne me quitte
+  pas*, *ah bon*, *s'il te plaît*. When you add a song, any of these it contains
+  are saved with its words, already sorted into the lists above and with a
+  hand-written meaning. The list is in [`js/phrases-fr.js`](js/phrases-fr.js);
+  add a line there to add a phrase. Matching ignores capitals, punctuation,
+  hyphens and elisions, so *Tu m'manques* and *tu me manques* are the same;
+  other spellings (feminine forms, dropped *ne*) are listed as `forms`.
+- **Picked by hand.** Press **Lyrics** next to a song, then tap the first and
+  last word of a phrase. The lists it belongs to are suggested from its words
+  (or taken from the built-in list) and can be changed before saving. Type a
+  meaning, or leave it empty and it is translated for you.
+
+Phrases sit in the same list as words, marked "phrase", and work the same way:
+lists, flashcards (the gap card blanks the whole phrase; typed answers ignore
+hyphens and punctuation), removing, line translation and the CSV.
+**Show → Phrases only** lists just them. A phrase counts as being as common as
+its rarest word, for "Hide basics" and sorting.
+
+A phrase is one stretch of one lyric line; it cannot run across two lines.
+
 ## Pronunciation
 
 The speaker button next to a word or a lyric line reads it aloud with the

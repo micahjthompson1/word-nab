@@ -3,7 +3,7 @@
 
 // "j'ai" is "je" + "ai". The elided half is expanded to the full word so the
 // learner sees a real vocabulary item.
-const ELISIONS = {
+export const ELISIONS = {
   l: 'le', d: 'de', n: 'ne', t: 'te', s: 'se', m: 'me', j: 'je', c: 'ce', qu: 'que',
   jusqu: 'jusque', lorsqu: 'lorsque', puisqu: 'puisque', quoiqu: 'quoique',
   quelqu: 'quelque', presqu: 'presque',
@@ -38,4 +38,10 @@ function resolve(part, start, known, found) {
   resolve(part.slice(apostrophe + 1), start + apostrophe + 1, known, found);
 }
 
-export const french = { code: 'fr', key, resolve };
+// One token of a phrase as it is matched: "m'" and "me" are the same word.
+function expand(token) {
+  const full = token.endsWith("'") && ELISIONS[token.slice(0, -1)];
+  return full || key(token);
+}
+
+export const french = { code: 'fr', key, resolve, expand };

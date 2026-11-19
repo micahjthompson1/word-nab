@@ -53,6 +53,7 @@ export function tally(words, cards, today) {
 // blanked out.
 function canGap(word, rules) {
   const shown = word.line.slice(word.start, word.end);
+  if (word.kind === 'phrase') return word.line.trim().length > shown.trim().length;
   if (rules.standsAlone && !rules.standsAlone(word.line, word.start, word.end)) return false;
   return rules.key(shown.toLowerCase()) === word.key && word.line.trim().length > shown.length;
 }
@@ -80,6 +81,13 @@ export function cardFace(word, card, style, rules = french) {
  * @returns {{ text: string, gap: boolean }[]}
  */
 export function gapSegments(word, rules = french) {
+  if (word.kind === 'phrase') {
+    return [
+      { text: word.line.slice(0, word.start), gap: false },
+      { text: word.line.slice(word.start, word.end), gap: true },
+      { text: word.line.slice(word.end), gap: false },
+    ].filter((part) => part.text);
+  }
   const repeats = wordsInLine(word.line, (key) => key === word.key, rules).filter((hit) => !hit.elided);
   const starts = new Map([...repeats, word].map(({ start, end }) => [start, end]));
   const segments = [];
@@ -99,7 +107,16 @@ export function gapSegments(word, rules = french) {
  * @returns {'right'|'accents'|'wrong'}  'accents' = right letters, wrong or missing accents
  */
 export function checkAnswer(typed, answer, rules = french) {
-  const tidy = (text) => rules.key(text.trim().toLowerCase().replace(/[’‘ʼ]/g, "'"));
+  // Punctuation, hyphens and spacing do not count, so a phrase can be typed
+  // "dis moi" for "dis-moi".
+  const tidy = (text) =>
+    rules.key(
+      text
+        .toLowerCase()
+        .replace(/[’‘ʼ]/g, "'")
+        .replace(/[^\p{L}\p{M}']+/gu, ' ')
+        .trim(),
+    );
   const withoutAccents = (text) => tidy(text).normalize('NFD').replace(/\p{M}/gu, '');
   if (tidy(typed) === tidy(answer)) return 'right';
   return withoutAccents(typed) === withoutAccents(answer) ? 'accents' : 'wrong';

@@ -10,7 +10,8 @@ const MAX_SONGS = 1000;
 
 /**
  * @typedef {object} SavedWord
- * @property {string} key      dictionary key; one entry per key
+ * @property {string} key      dictionary key; one entry per key. Phrases start with "p:".
+ * @property {'phrase'} [kind] set on phrases; single words have none
  * @property {string} word     the word as shown
  * @property {string} meaning  meaning in the reader's language
  * @property {string} note     grammar hint ("verb · from être · present")
@@ -25,6 +26,7 @@ const MAX_SONGS = 1000;
  *   translated yet (named after the first version, which only translated into English)
  * @property {string[]} [functions]  what the word does in the song ('expressive', 'narrate', …),
  *   on versions that sort words that way
+ * @property {boolean} [picked]  a phrase the learner picked by hand
  * @property {number} addedAt
  */
 
@@ -98,6 +100,24 @@ export function removeWord(key) {
   removed.add(key);
   persist();
   return { word, index };
+}
+
+/** Change some fields of one saved item (a phrase's meaning, once translated). */
+export function updateWord(key, change) {
+  const word = words.find((w) => w.key === key);
+  if (!word) return;
+  Object.assign(word, change);
+  persist();
+}
+
+/** Is this key in the list? */
+export function hasWord(key) {
+  return words.some((w) => w.key === key);
+}
+
+/** Allow one removed item back — the learner picked it again on purpose. */
+export function unremove(key) {
+  if (removed.delete(key)) persist();
 }
 
 export function restoreWord({ word, index }) {

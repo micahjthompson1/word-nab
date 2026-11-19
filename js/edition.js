@@ -10,6 +10,7 @@
 import { english } from './lang-en.js';
 import { frenchFunctions } from './functions-fr.js';
 import { french } from './lang-fr.js';
+import { PHRASES } from './phrases-fr.js';
 
 /**
  * @typedef {object} Edition
@@ -21,6 +22,8 @@ import { french } from './lang-fr.js';
  * @property {(native: string) => string} wordList  the word-list file, relative to the site root
  * @property {{ list: { id: string, name: string, hint: string }[], classify: Function }|null} functions
  *   sorts words into lists by what they do in a song (expressive, narrate, …); null where not offered
+ * @property {object[]|null} phrases  built-in phrases found in songs (phrases-fr.js); null where
+ *   phrases are not offered
  */
 
 /** @type {Record<string, Edition>} */
@@ -33,6 +36,7 @@ const EDITIONS = {
     storagePrefix: 'wordnab.',
     wordList: () => 'data/words.fr.json',
     functions: frenchFunctions,
+    phrases: PHRASES,
   },
   en: {
     id: 'en',
@@ -42,6 +46,7 @@ const EDITIONS = {
     storagePrefix: 'wordnab.en.',
     wordList: (native) => `data/words.en-${native}.json`,
     functions: null,
+    phrases: null,
   },
 };
 
