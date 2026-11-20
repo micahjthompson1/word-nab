@@ -201,6 +201,10 @@ Besides single words, the French page saves phrases, in two ways:
   last word of a phrase. The lists it belongs to are suggested from its words
   (or taken from the built-in list) and can be changed before saving. Type a
   meaning, or leave it empty and it is translated for you.
+- **From a saved word.** Every word in your list has **Save lyric as phrase**
+  under its lyric. It opens that line with the whole of it picked: save it as
+  it is, or tap the first and last word of a shorter phrase. This works after
+  the song has left the Songs list.
 
 Phrases sit in the same list as words, marked "phrase", and work the same way:
 lists, flashcards (the gap card blanks the whole phrase; typed answers ignore
