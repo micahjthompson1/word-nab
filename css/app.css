@@ -965,7 +965,6 @@ mark {
   font-size: 0.88rem;
 }
 
-.known-sample,
 .lw.known {
   text-decoration: underline dotted var(--accent);
   text-decoration-thickness: 2px;
@@ -1043,4 +1042,15 @@ mark {
 .pick-actions {
   display: flex;
   gap: 8px;
+}
+
+.save-phrase {
+  margin-top: 2px;
+  font-size: 0.85rem;
+  color: var(--muted);
+  text-decoration: underline dotted;
+}
+
+.save-phrase:hover {
+  color: var(--accent);
 }

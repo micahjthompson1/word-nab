@@ -506,15 +506,36 @@ function bindLyrics() {
   });
 }
 
-function openLyrics(track) {
+const LYRICS_HELP = 'Tap the first and the last word of a phrase to pick it. Underlined phrases are in the built-in list and are saved with the song’s words.';
+const LINE_HELP = 'The whole line is picked. Save it as it is, or tap the first and the last word of a shorter phrase.';
+
+/**
+ * @param {{ title: string, artist: string }} track
+ * @param {string[]} lines  the lyrics to pick from
+ * @param {boolean} [wholeLine]  start with the whole of the first line picked
+ */
+function openLyrics(track, lines = cleanLines(track.lyrics.text), wholeLine = false) {
   pick.track = track;
-  pick.lines = cleanLines(track.lyrics.text);
+  pick.lines = lines;
   clearPick();
   el.lyricsSong.textContent = track.artist ? `${track.title} — ${track.artist}` : track.title;
   el.lyricLines.replaceChildren(...pick.lines.map(lyricLine));
+  $('lyrics-help').textContent = wholeLine ? LINE_HELP : LYRICS_HELP;
   setStatus($('pick-status'), '');
   el.lyrics.showModal();
   el.lyricLines.scrollTop = 0;
+  const words = tokens(lines[0] ?? '', EDITION.rules);
+  if (wholeLine && words.length) {
+    Object.assign(pick, { line: 0, from: 0, to: words.length - 1, anchor: -1 });
+    suggestLists();
+    renderPick();
+  }
+}
+
+/** Save a saved word's lyric line, or part of it, as a phrase. */
+function openSavedLine(key) {
+  const word = wordList.allWords().find((w) => w.key === key);
+  if (word) openLyrics({ title: word.song, artist: word.artist }, [word.line], true);
 }
 
 // One lyric line with every word as a button. Built-in phrases are underlined.
@@ -832,6 +853,9 @@ function wordRow(word) {
         ? h('p', { class: 'line-en', lang: own }, word.english)
         : h('button', { class: 'link translate', type: 'button' }, 'Translate line'),
       h('p', { class: 'song' }, word.artist ? `${word.song} — ${word.artist}` : word.song),
+      CATALOGUE &&
+        word.kind !== 'phrase' &&
+        h('button', { class: 'link save-phrase', type: 'button', title: 'Save this lyric, or part of it, as a phrase' }, 'Save lyric as phrase'),
     ),
     h('button', { class: 'remove', type: 'button', 'aria-label': `Remove ${word.word}`, title: 'Remove' }, '×'),
   );
@@ -844,6 +868,8 @@ function onWordClick(event) {
   if (tag) {
     updatePrefs({ list: tag.dataset.list });
     $('words-heading').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  } else if (event.target.closest('.save-phrase')) {
+    openSavedLine(row.dataset.key);
   } else if (event.target.closest('.translate-meaning')) {
     const button = event.target.closest('.translate-meaning');
     button.disabled = true;
