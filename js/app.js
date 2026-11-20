@@ -7,10 +7,11 @@ import { h, markedLine, setStatus, speakButton } from './dom.js';
 import { EDITION, LANGUAGES, LEARNING } from './edition.js';
 import * as flashcards from './flashcards.js';
 import { fetchLyrics, searchSongs } from './lyrics.js';
+import { compileCatalogue, findPhrases, phraseKey, phraseText, tokens } from './phrases.js';
 import * as speech from './speech.js';
 import * as spotify from './spotify.js';
 import { load, save } from './storage.js';
-import { LANGUAGE_NAMES, detectLanguage, extractWords } from './text.js';
+import { LANGUAGE_NAMES, cleanLines, detectLanguage, extractWords, wordsInLine } from './text.js';
 import { TranslationQuotaError, cachedTranslation, translateLine } from './translate.js';
 import * as wordList from './words.js';
 
@@ -31,17 +32,24 @@ const el = {
   songQuery: $('song-query'),
   wordCount: $('word-count'),
   sort: $('sort'),
+  kind: $('kind'), // words / phrases; only on pages that offer phrases
   hide: $('hide'),
   flashcardsOpen: $('flashcards-open'),
   translateAll: $('translate-all'),
   downloadCsv: $('download-csv'),
   clearWords: $('clear-words'),
   wordsStatus: $('words-status'),
+  lists: $('lists'), // only on pages that sort words by language function
+  listHint: $('list-hint'),
   wordTable: $('word-table'),
   words: $('words'),
   wordsEmpty: $('words-empty'),
   removedNote: $('removed-note'),
   toast: $('toast'),
+  lyrics: $('lyrics'), // the lyrics dialog, for picking phrases by hand
+  lyricsSong: $('lyrics-song'),
+  lyricLines: $('lyric-lines'),
+  picker: $('phrase-picker'),
 };
 
 /**
@@ -62,10 +70,18 @@ const state = {
   /** @type {Track[]} */
   tracks: [],
   // `native` is the language the meanings are shown in.
-  prefs: { sort: 'recent', hide: 0, native: defaultNative(), ...load('prefs.v1', {}) },
+  // `list` is the language-function list being shown ('all', 'other' or a FUNCTIONS id).
+  // `kind` is 'all', 'words' or 'phrases'.
+  prefs: { sort: 'recent', hide: 0, list: 'all', kind: 'all', native: defaultNative(), ...load('prefs.v1', {}) },
   loadRun: 0, // bumped on every refresh so a slow, older load cannot overwrite a newer one
   translatingAll: false,
 };
+
+// The built-in phrases, ready for matching (French version only).
+const CATALOGUE = EDITION.phrases ? compileCatalogue(EDITION.phrases, EDITION.rules) : null;
+
+// Names of the word lists by language function (French version only), by id.
+const LIST_NAMES = Object.fromEntries((EDITION.functions?.list ?? []).map((f) => [f.id, f.name]));
 
 start();
 
@@ -77,6 +93,9 @@ async function start() {
   }
 
   if (!EDITION.natives.includes(state.prefs.native)) state.prefs.native = defaultNative();
+  if (!listIds().includes(state.prefs.list)) state.prefs.list = 'all';
+  if (!CATALOGUE || !['all', 'words', 'phrases'].includes(state.prefs.kind)) state.prefs.kind = 'all';
+  if (el.kind) el.kind.value = state.prefs.kind;
   el.sort.value = state.prefs.sort;
   el.hide.value = String(state.prefs.hide);
   renderNativePicker();
@@ -84,6 +103,7 @@ async function start() {
   flashcards.init({ deck: shownWords, native: () => state.prefs.native, onClose: renderWords });
   renderWords();
   renderTracks();
+  sortSavedWords();
 
   try {
     await spotify.completeLogin();
@@ -101,12 +121,16 @@ function bindEvents() {
 
   el.sort.addEventListener('change', () => updatePrefs({ sort: el.sort.value }));
   el.hide.addEventListener('change', () => updatePrefs({ hide: Number(el.hide.value) }));
+  el.kind?.addEventListener('change', () => updatePrefs({ kind: el.kind.value }));
+  el.tracks.addEventListener('click', onTrackClick);
+  if (el.lyrics) bindLyrics();
   el.translateAll.addEventListener('click', translateAllLines);
   el.downloadCsv.addEventListener('click', downloadCsv);
   el.clearWords.addEventListener('click', clearWords);
   el.words.addEventListener('click', onWordClick);
   el.flashcardsOpen.addEventListener('click', flashcards.open);
   el.native?.addEventListener('change', () => changeNative(el.native.value));
+  el.lists?.addEventListener('click', onListClick);
   document.addEventListener('click', onSpeakClick);
   enableSwipeToDelete(el.words);
 }
@@ -302,7 +326,18 @@ function trackRow(track) {
       ),
       h('span', { class: `badge ${badge.kind}` }, badge.text),
     ),
+    // Outside the label, so pressing it does not tick the song.
+    CATALOGUE &&
+      usable &&
+      h('button', { class: 'button quiet lyrics-open', type: 'button', title: 'Read the lyrics and pick phrases' }, 'Lyrics'),
   );
+}
+
+function onTrackClick(event) {
+  if (!event.target.closest('.lyrics-open')) return;
+  const row = event.target.closest('.track');
+  const track = row && state.tracks.find((t) => t.id === row.dataset.id);
+  if (track) openLyrics(track);
 }
 
 function trackBadge(track) {
@@ -352,8 +387,17 @@ async function addSelectedWords() {
 
   const now = Date.now();
   let added = 0;
+  let phrasesAdded = 0;
   for (const track of tracks) {
-    const found = extractWords(track.lyrics.text, dictionary.has, EDITION.rules);
+    if (CATALOGUE) {
+      phrasesAdded += wordList.addWords(
+        findPhrases(track.lyrics.text, CATALOGUE, EDITION.rules).map((hit) =>
+          phraseItem(CATALOGUE.byKey.get(hit.key), track, hit.line, hit.start, hit.end, dictionary),
+        ),
+        now,
+      );
+    }
+    const found = extractWords(track.lyrics.text, dictionary.has, EDITION.rules, tagger(dictionary));
     added += wordList.addWords(
       found.map((hit) => {
         const info = dictionary.get(hit.key);
@@ -370,6 +414,7 @@ async function addSelectedWords() {
           start: hit.start,
           end: hit.end,
           english: cachedTranslation(hit.line, state.prefs.native) ?? '',
+          ...(EDITION.functions && { functions: hit.tags }),
         };
       }),
       now,
@@ -379,15 +424,19 @@ async function addSelectedWords() {
   }
 
   const songs = `${tracks.length} ${tracks.length === 1 ? 'song' : 'songs'}`;
+  const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+  const what = [added && plural(added, 'new word', 'new words'), phrasesAdded && plural(phrasesAdded, 'phrase', 'phrases')]
+    .filter(Boolean)
+    .join(' and ');
   setStatus(
     el.wordsStatus,
-    added
-      ? `Added ${added} new ${added === 1 ? 'word' : 'words'} from ${songs}.`
+    added || phrasesAdded
+      ? `Added ${what} from ${songs}.`
       : `Nothing new in ${tracks.length === 1 ? 'that song' : 'those songs'} — every common word is already in your list or was removed by you.`,
   );
   renderTracks();
   renderWords();
-  if (added) $('words-heading').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  if (added || phrasesAdded) $('words-heading').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function updatePrefs(change) {
@@ -396,9 +445,309 @@ function updatePrefs(change) {
   renderWords();
 }
 
-/** The saved words minus those hidden by "Hide basics" — also what the flashcards practise. */
+/**
+ * The saved words in the chosen list, minus those hidden by "Hide basics" —
+ * also what the flashcards practise.
+ */
 function shownWords() {
-  return wordList.allWords().filter((word) => word.rank > state.prefs.hide);
+  return wordList.allWords().filter((word) => isShown(word) && inList(word, state.prefs.list));
+}
+
+/** Passes "Hide basics" and the words / phrases choice. */
+function isShown(word) {
+  if (state.prefs.kind === 'words' && word.kind === 'phrase') return false;
+  if (state.prefs.kind === 'phrases' && word.kind !== 'phrase') return false;
+  return word.rank > state.prefs.hide;
+}
+
+// ---------------------------------------------------------------------------
+// Phrases (French version only): built-in expressions found in the songs, and
+// stretches of a lyric the learner picks by hand.
+
+/**
+ * A phrase ready to save.
+ * @param {{ phrase?: string, meaning?: string, literally?: string, lists?: string[] }|undefined} entry
+ *   the built-in phrase, or undefined for one picked by hand
+ */
+function phraseItem(entry, track, line, start, end, dictionary, picked = null) {
+  const text = entry?.phrase ?? phraseText(line, start, end);
+  // As common as its rarest word, so "Hide basics" and "Most common first" place it sensibly.
+  const ranks = wordsInLine(line.slice(start, end), dictionary.has, EDITION.rules).map((hit) => dictionary.get(hit.key).rank);
+  return {
+    key: phraseKey(text, EDITION.rules),
+    kind: 'phrase',
+    word: text,
+    meaning: picked?.meaning || entry?.meaning || '',
+    note: ['phrase', entry?.literally && `literally “${entry.literally}”`, picked && 'picked by you'].filter(Boolean).join(' · '),
+    also: '',
+    rank: ranks.length ? Math.max(...ranks) : 3000,
+    song: track.title,
+    artist: track.artist,
+    line,
+    start,
+    end,
+    english: cachedTranslation(line, state.prefs.native) ?? '',
+    functions: picked?.functions ?? entry?.lists ?? [],
+    ...(picked && { picked: true }),
+  };
+}
+
+// The lyrics dialog. Tap the first and last word of a phrase to pick it.
+const pick = { track: null, lines: [], line: -1, from: -1, to: -1, anchor: -1, lists: new Set(), entry: null };
+
+function bindLyrics() {
+  $('lyrics-close').addEventListener('click', () => el.lyrics.close());
+  el.lyricLines.addEventListener('click', onLyricClick);
+  el.picker.addEventListener('click', onPickerClick);
+  el.picker.addEventListener('submit', savePickedPhrase);
+  el.lyrics.addEventListener('close', () => {
+    setStatus($('pick-status'), '');
+    renderWords();
+  });
+}
+
+function openLyrics(track) {
+  pick.track = track;
+  pick.lines = cleanLines(track.lyrics.text);
+  clearPick();
+  el.lyricsSong.textContent = track.artist ? `${track.title} — ${track.artist}` : track.title;
+  el.lyricLines.replaceChildren(...pick.lines.map(lyricLine));
+  setStatus($('pick-status'), '');
+  el.lyrics.showModal();
+  el.lyricLines.scrollTop = 0;
+}
+
+// One lyric line with every word as a button. Built-in phrases are underlined.
+function lyricLine(line, index) {
+  const words = tokens(line, EDITION.rules);
+  const known = new Set();
+  for (const hit of findPhrases(line, CATALOGUE, EDITION.rules)) {
+    words.forEach((word, i) => word.start >= hit.start && word.end <= hit.end && known.add(i));
+  }
+  const parts = [];
+  let position = 0;
+  words.forEach((word, i) => {
+    // "j'ai" is tapped as one word: an elision joins the word after it.
+    if (word.start < position) return;
+    let last = i;
+    while (line[words[last].end - 1] === "'" || line[words[last].end - 1] === '’') {
+      if (!words[last + 1] || words[last + 1].start !== words[last].end) break;
+      last++;
+    }
+    if (word.start > position) parts.push(line.slice(position, word.start));
+    parts.push(
+      h(
+        'button',
+        { class: `lw${known.has(i) ? ' known' : ''}`, type: 'button', dataset: { from: i, to: last } },
+        line.slice(word.start, words[last].end),
+      ),
+    );
+    position = words[last].end;
+  });
+  if (position < line.length) parts.push(line.slice(position));
+  return h('p', { class: 'lyric-line', lang: LEARNING.tag, dataset: { line: index } }, ...parts);
+}
+
+function onLyricClick(event) {
+  const button = event.target.closest('.lw');
+  if (!button) return;
+  const line = Number(button.closest('.lyric-line').dataset.line);
+  const from = Number(button.dataset.from);
+  const to = Number(button.dataset.to);
+  if (line !== pick.line || pick.anchor === -1) {
+    Object.assign(pick, { line, from, to, anchor: from });
+  } else if (pick.from === from && pick.to === to) {
+    clearPick(); // tapping the only picked word again lets go of it
+    return;
+  } else {
+    Object.assign(pick, { from: Math.min(pick.anchor, from), to: Math.max(pick.anchor, to) });
+    pick.anchor = -1; // the next tap starts a new phrase
+  }
+  suggestLists();
+  renderPick();
+}
+
+function clearPick() {
+  Object.assign(pick, { line: -1, from: -1, to: -1, anchor: -1, entry: null });
+  pick.lists = new Set();
+  renderPick();
+}
+
+/** Where the picked phrase sits in its line. */
+function pickedSpan() {
+  const line = pick.lines[pick.line];
+  const words = tokens(line, EDITION.rules);
+  return { line, start: words[pick.from].start, end: words[pick.to].end };
+}
+
+// Start the list choices from what the phrase's words do, or from the
+// built-in list when the phrase is one of its expressions.
+async function suggestLists() {
+  const { line, start, end } = pickedSpan();
+  const key = phraseKey(line.slice(start, end), EDITION.rules);
+  pick.entry = CATALOGUE.byKey.get(key) ?? null;
+  if (pick.entry) {
+    pick.lists = new Set(pick.entry.lists);
+    return;
+  }
+  pick.lists = new Set();
+  const dictionary = await loadDictionary(state.prefs.native).catch(() => null);
+  if (!dictionary || pick.line === -1 || pickedSpan().start !== start) return;
+  for (const hit of wordsInLine(line, dictionary.has, EDITION.rules)) {
+    if (hit.start < start || hit.end > end) continue;
+    const readings = dictionary.get(hit.key).readings;
+    EDITION.functions.classify(hit.key, readings, line, hit.start, hit.end).forEach((id) => pick.lists.add(id));
+  }
+  renderPick();
+}
+
+function renderPick() {
+  el.lyricLines.querySelectorAll('.lw').forEach((button) => {
+    const line = Number(button.closest('.lyric-line').dataset.line);
+    const picked = line === pick.line && Number(button.dataset.from) >= pick.from && Number(button.dataset.to) <= pick.to;
+    button.classList.toggle('picked', picked);
+    button.setAttribute('aria-pressed', String(picked));
+  });
+  el.picker.hidden = pick.line === -1;
+  if (pick.line === -1) return;
+  const { line, start, end } = pickedSpan();
+  const text = phraseText(line, start, end);
+  const key = phraseKey(text, EDITION.rules);
+  const saved = wordList.hasWord(key);
+  $('pick-text').textContent = text;
+  $('pick-hint').textContent = pick.anchor !== -1 ? 'Tap another word in this line to make it a longer phrase.' : '';
+  $('pick-lists').replaceChildren(
+    ...EDITION.functions.list.map((f) =>
+      h(
+        'button',
+        { class: `tag tag-${f.id} pick-list`, type: 'button', dataset: { list: f.id }, 'aria-pressed': String(pick.lists.has(f.id)) },
+        f.name,
+      ),
+    ),
+  );
+  const meaning = $('pick-meaning');
+  meaning.placeholder = pick.entry ? pick.entry.meaning : 'Meaning (optional: translated for you if left empty)';
+  const save = $('pick-save');
+  save.disabled = saved;
+  save.textContent = saved ? 'In your list' : 'Save phrase';
+}
+
+function onPickerClick(event) {
+  const chip = event.target.closest('.pick-list');
+  if (chip) {
+    const { list } = chip.dataset;
+    if (pick.lists.has(list)) pick.lists.delete(list);
+    else pick.lists.add(list);
+    chip.setAttribute('aria-pressed', String(pick.lists.has(list)));
+  } else if (event.target.closest('#pick-cancel')) {
+    clearPick();
+  }
+}
+
+async function savePickedPhrase(event) {
+  event.preventDefault();
+  if (pick.line === -1) return;
+  const status = $('pick-status');
+  let dictionary;
+  try {
+    dictionary = await loadDictionary(state.prefs.native);
+  } catch (error) {
+    setStatus(status, error.message, 'error');
+    return;
+  }
+  const { line, start, end } = pickedSpan();
+  const meaningInput = $('pick-meaning');
+  const typed = meaningInput.value.trim();
+  const functions = EDITION.functions.list.map((f) => f.id).filter((id) => pick.lists.has(id));
+  const item = phraseItem(pick.entry ?? undefined, pick.track, line, start, end, dictionary, { meaning: typed, functions });
+  wordList.unremove(item.key);
+  wordList.addWords([item], Date.now());
+  meaningInput.value = '';
+  const where = functions.length ? ` to ${functions.map((id) => LIST_NAMES[id]).join(', ')}` : '';
+  setStatus(status, `Saved “${item.word}”${where}.`);
+  clearPick();
+  if (!item.meaning) translateMeaning(item.key, status);
+}
+
+/** Fill in a picked phrase's meaning by translating it. */
+async function translateMeaning(key, status = el.wordsStatus) {
+  const item = wordList.allWords().find((w) => w.key === key);
+  if (!item) return;
+  const { native } = state.prefs;
+  try {
+    const meaning = await translateLine(item.word, native);
+    if (native !== state.prefs.native) return;
+    wordList.updateWord(key, { meaning });
+  } catch (error) {
+    setStatus(status, `Saved, but the meaning could not be translated: ${error.message}`, 'warn');
+  }
+  renderWords();
+}
+
+// ---------------------------------------------------------------------------
+// Lists by language function (French version only): what a word does in a
+// song — expresses a feeling, tells a story, describes, gives an order, or
+// keeps the conversation going. A word can be in several lists.
+
+function listIds() {
+  return EDITION.functions ? ['all', ...EDITION.functions.list.map((f) => f.id), 'other'] : ['all'];
+}
+
+function inList(word, list) {
+  if (list === 'all') return true;
+  const functions = word.functions ?? [];
+  return list === 'other' ? functions.length === 0 : functions.includes(list);
+}
+
+/** extractWords' tagger: what one use of a word does in its line. */
+function tagger(dictionary) {
+  if (!EDITION.functions) return undefined;
+  return (hit, line) => EDITION.functions.classify(hit.key, dictionary.get(hit.key)?.readings ?? [], line, hit.start, hit.end);
+}
+
+// Words saved before the lists existed are sorted from the line they were saved with.
+async function sortSavedWords() {
+  if (!EDITION.functions || wordList.allWords().every((word) => Array.isArray(word.functions))) return;
+  let dictionary;
+  try {
+    dictionary = await loadDictionary(state.prefs.native);
+  } catch {
+    return; // tried again on the next visit
+  }
+  const tag = tagger(dictionary);
+  const sorted = wordList.sortUnsorted((word) => (dictionary.has(word.key) ? tag(word, word.line) : null));
+  if (sorted) renderWords();
+}
+
+function onListClick(event) {
+  const button = event.target.closest('[data-list]');
+  if (button) updatePrefs({ list: button.dataset.list });
+}
+
+function renderLists() {
+  if (!el.lists) return;
+  const total = wordList.allWords().length;
+  el.lists.hidden = total === 0;
+  el.listHint.hidden = true;
+  if (!total) return;
+  const basics = wordList.allWords().filter(isShown);
+  const name = (id) => ({ all: 'All', other: 'Other' })[id] ?? LIST_NAMES[id];
+  el.lists.replaceChildren(
+    ...listIds().map((id) =>
+      h(
+        'button',
+        { class: 'list-tab', type: 'button', dataset: { list: id }, 'aria-pressed': String(id === state.prefs.list) },
+        name(id),
+        h('span', { class: 'list-count' }, String(basics.filter((word) => inList(word, id)).length)),
+      ),
+    ),
+  );
+  const hint =
+    state.prefs.list === 'other'
+      ? 'Words and phrases that are not in any of the five lists: mostly nouns and the small grammar words.'
+      : EDITION.functions.list.find((f) => f.id === state.prefs.list)?.hint;
+  el.listHint.hidden = !hint;
+  el.listHint.textContent = hint ?? '';
 }
 
 /** The shown words in the chosen order — what the list and the CSV show. */
@@ -422,7 +771,11 @@ function renderWords() {
   el.words.replaceChildren(...words.map(wordRow));
   el.wordTable.hidden = words.length === 0;
   el.wordsEmpty.hidden = words.length > 0;
-  if (total && !words.length) {
+  renderLists();
+  const listName = LIST_NAMES[state.prefs.list] ?? (state.prefs.list === 'other' ? 'Other' : '');
+  if (total && !words.length && state.prefs.list !== 'all') {
+    el.wordsEmpty.textContent = `Nothing in the ${listName} list yet${state.prefs.hide || state.prefs.kind !== 'all' ? ' with these settings' : ''}.`;
+  } else if (total && !words.length) {
     el.wordsEmpty.textContent = `All ${total} saved words are hidden by “Hide basics”.`;
   } else if (!total) {
     el.wordsEmpty.replaceChildren('No words yet. Tick some songs above and press ', h('strong', {}, 'Add words'), '.');
@@ -452,14 +805,24 @@ function wordRow(word) {
   const own = LANGUAGES[state.prefs.native].tag;
   return h(
     'li',
-    { class: 'word', dataset: { key: word.key } },
+    { class: word.kind === 'phrase' ? 'word phrase' : 'word', dataset: { key: word.key } },
     h('div', { class: 'word-fr' }, h('span', { lang: LEARNING.tag }, word.word), speakButton(word.word)),
     h(
       'div',
       { class: 'word-meaning' },
-      h('span', { class: 'meaning', lang: own }, word.meaning),
+      word.meaning
+        ? h('span', { class: 'meaning', lang: own }, word.meaning)
+        : h('button', { class: 'link translate-meaning', type: 'button' }, 'Translate phrase'),
       word.note && h('span', { class: 'note' }, word.note),
       word.also && h('span', { class: 'note' }, 'also: ', h('span', { lang: own }, word.also)),
+      word.functions?.length > 0 &&
+        h(
+          'span',
+          { class: 'tags' },
+          word.functions.map((id) =>
+            h('button', { class: `tag tag-${id}`, type: 'button', title: `Show the ${LIST_NAMES[id]} list`, dataset: { list: id } }, LIST_NAMES[id]),
+          ),
+        ),
     ),
     h(
       'div',
@@ -477,7 +840,16 @@ function wordRow(word) {
 function onWordClick(event) {
   const row = event.target.closest('.word');
   if (!row) return;
-  if (event.target.closest('.remove')) removeWord(row);
+  const tag = event.target.closest('.tag');
+  if (tag) {
+    updatePrefs({ list: tag.dataset.list });
+    $('words-heading').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  } else if (event.target.closest('.translate-meaning')) {
+    const button = event.target.closest('.translate-meaning');
+    button.disabled = true;
+    button.textContent = 'Translating…';
+    translateMeaning(row.dataset.key);
+  } else if (event.target.closest('.remove')) removeWord(row);
   else if (event.target.closest('.translate')) translateRow(row, event.target.closest('.translate'));
 }
 
@@ -599,7 +971,7 @@ function downloadCsv() {
   const words = visibleWords();
   if (!words.length) return;
   // The BOM makes Excel read the accents correctly.
-  const blob = new Blob(['﻿', toCsv(words, LANGUAGES[state.prefs.native].name)], { type: 'text/csv;charset=utf-8' });
+  const blob = new Blob(['﻿', toCsv(words, LANGUAGES[state.prefs.native].name, EDITION.functions && LIST_NAMES)], { type: 'text/csv;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const link = h('a', { href: url, download: 'word-data.csv' });
   document.body.append(link);

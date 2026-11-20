@@ -14,12 +14,15 @@ const loading = new Map(); // word-list file → Promise of its dictionary
  * @param {string} native  the language the meanings are in (one of EDITION.natives)
  * @returns {Promise<{ size: number, has(key: string): boolean, get(key: string): WordInfo|null }>}
  *
- * @typedef {{ rank: number, meaning: string, note: string, also: string, spelling: string|null }} WordInfo
+ * @typedef {{ rank: number, meaning: string, note: string, also: string, spelling: string|null, readings: Reading[] }} WordInfo
  *   rank     — 1 is the most common word in the language
  *   meaning  — meaning of the most likely reading
  *   note     — grammar hint, e.g. "verb · from être · present"
  *   also     — a second reading when there is one, e.g. "to follow (suivre)"
  *   spelling — how to write the word when it takes a capital ("Monday", "I"), otherwise null
+ *   readings — the raw readings, likeliest first, for sorting words by what they do
+ *
+ * @typedef {{ lemma: string, pos: string, form: string|null }} Reading
  */
 export function loadDictionary(native = EDITION.natives[0]) {
   const file = EDITION.wordList(native);
@@ -50,5 +53,6 @@ function describe(key, [rank, main, second]) {
   const note = [POS_LABELS[pos], !isOwnLemma(lemma) && `from ${lemma}`, form].filter(Boolean).join(' · ');
   const also = second ? `${second[2]} (${isOwnLemma(second[0]) ? POS_LABELS[second[1]] : second[0]})` : '';
   const spelling = lemma !== key && lemma.toLowerCase() === key ? lemma : null;
-  return { rank, meaning, note, also, spelling };
+  const readings = [main, second].filter(Boolean).map(([lemma, pos, , form]) => ({ lemma, pos, form: form ?? null }));
+  return { rank, meaning, note, also, spelling, readings };
 }

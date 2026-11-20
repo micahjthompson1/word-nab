@@ -7,16 +7,20 @@
 /**
  * @param {import('./words.js').SavedWord[]} words
  * @param {string} [language]  the language the lyric lines are translated into
+ * @param {Record<string, string>} [functionNames]  id → name of the language functions;
+ *   when given, a last column lists the ones each word belongs to
  * @returns {string}
  */
-export function toCsv(words, language = 'English') {
+export function toCsv(words, language = 'English', functionNames = null) {
   const HEADERS = ['Common Word', 'Translation', 'Song', 'Lyric', `Lyric (${language})`];
+  if (functionNames) HEADERS.push('Language functions');
   const rows = words.map((w) => [
     w.word,
     w.meaning,
     w.artist ? `${w.song} - ${w.artist}` : w.song,
     w.line,
     w.english,
+    ...(functionNames ? [(w.functions ?? []).map((id) => functionNames[id] ?? id).join('; ')] : []),
   ]);
   return [HEADERS, ...rows].map((row) => row.map(cell).join(',')).join('\r\n') + '\r\n';
 }

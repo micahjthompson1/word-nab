@@ -10,7 +10,8 @@ const MAX_SONGS = 1000;
 
 /**
  * @typedef {object} SavedWord
- * @property {string} key      dictionary key; one entry per key
+ * @property {string} key      dictionary key; one entry per key. Phrases start with "p:".
+ * @property {'phrase'} [kind] set on phrases; single words have none
  * @property {string} word     the word as shown
  * @property {string} meaning  meaning in the reader's language
  * @property {string} note     grammar hint ("verb · from être · present")
@@ -23,6 +24,9 @@ const MAX_SONGS = 1000;
  * @property {number} end
  * @property {string} english  translation of `line` into the reader's language, or '' if not
  *   translated yet (named after the first version, which only translated into English)
+ * @property {string[]} [functions]  what the word does in the song ('expressive', 'narrate', …),
+ *   on versions that sort words that way
+ * @property {boolean} [picked]  a phrase the learner picked by hand
  * @property {number} addedAt
  */
 
@@ -66,13 +70,23 @@ export function removedCount() {
 export function addWords(candidates, addedAt) {
   const have = new Set(words.map((w) => w.key));
   let added = 0;
+  let changed = false;
   for (const candidate of candidates) {
+    if (have.has(candidate.key) && candidate.functions?.length) {
+      // Already saved: a new song can still show it doing another job.
+      const word = words.find((w) => w.key === candidate.key);
+      const more = candidate.functions.filter((id) => !word.functions?.includes(id));
+      if (more.length && Array.isArray(word.functions)) {
+        word.functions = [...word.functions, ...more];
+        changed = true;
+      }
+    }
     if (have.has(candidate.key) || removed.has(candidate.key)) continue;
     have.add(candidate.key);
     words.push({ ...candidate, addedAt });
     added++;
   }
-  if (added) persist();
+  if (added || changed) persist();
   return added;
 }
 
@@ -86,6 +100,24 @@ export function removeWord(key) {
   removed.add(key);
   persist();
   return { word, index };
+}
+
+/** Change some fields of one saved item (a phrase's meaning, once translated). */
+export function updateWord(key, change) {
+  const word = words.find((w) => w.key === key);
+  if (!word) return;
+  Object.assign(word, change);
+  persist();
+}
+
+/** Is this key in the list? */
+export function hasWord(key) {
+  return words.some((w) => w.key === key);
+}
+
+/** Allow one removed item back — the learner picked it again on purpose. */
+export function unremove(key) {
+  if (removed.delete(key)) persist();
 }
 
 export function restoreWord({ word, index }) {
@@ -135,6 +167,24 @@ export function changeLanguage(lookup, translationOf) {
     word.english = translationOf(word.line) ?? '';
   }
   persist();
+}
+
+/**
+ * Sort words saved before the lists by language function existed.
+ * @param {(word: SavedWord) => string[]|null} classify  null when the word cannot be looked up
+ * @returns {number} how many words were sorted
+ */
+export function sortUnsorted(classify) {
+  let sorted = 0;
+  for (const word of words) {
+    if (Array.isArray(word.functions)) continue;
+    const functions = classify(word);
+    if (!functions) continue;
+    word.functions = functions;
+    sorted++;
+  }
+  if (sorted) persist();
+  return sorted;
 }
 
 /** Record the translation of a lyric line on every word that uses it. */

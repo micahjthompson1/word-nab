@@ -159,6 +159,57 @@ To add another language for the meanings, give the builder a source for it,
 list it under `natives` in [`js/edition.js`](js/edition.js), and add a column to
 the overrides.
 
+## Word lists by language function (French version)
+
+Above the word list, the French page sorts your words by what they do in the
+songs they came from. Pick a list to show only its words; the flashcards and
+the CSV download then use that list too.
+
+| List | What it collects | Found by |
+| --- | --- | --- |
+| **Expressive** | feelings: *aime*, *regrette*, *cœur*, *triste* | the word's dictionary form is on a hand-made list of feeling words |
+| **Narrate** | telling a story: *était*, *parti*, *d'abord*, *puis*, *ensuite*, *enfin* | an imperfect, simple past or past participle (also after *avoir*/*être*: *il m'a dit*), or a time word |
+| **Describe** | adjectives: *belle*, *rouge*, *seul* | the word is an adjective |
+| **Directive** | commands and invitations: *viens*, *reste*, *dis-moi*, *ne me quitte pas* | a present-tense form that can be an imperative, with no subject before it (*Viens avec moi*, not *Tu viens ?*) |
+| **Phatic** | greetings and interjections: *salut*, *merci*, *ah*, *allez*, *ah bon* | always for greetings and interjections; *allez*, *bon*, *tiens*, *écoute* only when they stand apart (*Allez, viens*, not *Vous allez partir*) |
+
+A word can be in several lists, and **Other words** holds the rest (mostly
+nouns and small grammar words). Every use of a word in a song is checked, and
+the lyric line kept as its example is the one that shows the most of its jobs.
+The rules are in [`js/functions-fr.js`](js/functions-fr.js); edit the word
+lists at the top of that file to move a word. Words saved before the lists
+existed are sorted from their saved line when the page opens.
+
+The sorting is by rule, not by understanding, so expect some misses: a line
+that carries on a sentence from the line before can make a verb look like an
+order (*Et le soleil / brille*), and a word only gets the jobs it does in the
+songs you added.
+
+## Phrases (French version)
+
+Besides single words, the French page saves phrases, in two ways:
+
+- **A built-in list** of about 130 set expressions that mean more than their
+  words — *tu me manques* ("I miss you"), *il était une fois*, *ne me quitte
+  pas*, *ah bon*, *s'il te plaît*. When you add a song, any of these it contains
+  are saved with its words, already sorted into the lists above and with a
+  hand-written meaning. The list is in [`js/phrases-fr.js`](js/phrases-fr.js);
+  add a line there to add a phrase. Matching ignores capitals, punctuation,
+  hyphens and elisions, so *Tu m'manques* and *tu me manques* are the same;
+  other spellings (feminine forms, dropped *ne*) are listed as `forms`.
+- **Picked by hand.** Press **Lyrics** next to a song, then tap the first and
+  last word of a phrase. The lists it belongs to are suggested from its words
+  (or taken from the built-in list) and can be changed before saving. Type a
+  meaning, or leave it empty and it is translated for you.
+
+Phrases sit in the same list as words, marked "phrase", and work the same way:
+lists, flashcards (the gap card blanks the whole phrase; typed answers ignore
+hyphens and punctuation), removing, line translation and the CSV.
+**Show → Phrases only** lists just them. A phrase counts as being as common as
+its rarest word, for "Hide basics" and sorting.
+
+A phrase is one stretch of one lyric line; it cannot run across two lines.
+
 ## Pronunciation
 
 The speaker button next to a word or a lyric line reads it aloud with the
