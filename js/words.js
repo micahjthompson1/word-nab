@@ -36,7 +36,7 @@ let words = [];
 // them — removing "je" once should be enough.
 let removed = new Set();
 
-// Songs whose words were already added, so the next visit only ticks new ones.
+// Songs whose words were already added, so the next visit only selects new ones.
 let songsDone = [];
 
 {

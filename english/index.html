@@ -34,7 +34,7 @@
     <section class="panel" aria-labelledby="songs-heading">
       <div class="panel-head">
         <h2 id="songs-heading">Songs</h2>
-        <p class="panel-sub" id="native-help">Tick the songs to learn from. English ones are ticked for you. Meanings are shown in the language you choose above.</p>
+        <p class="panel-sub" id="native-help">Select the songs to learn from. English ones are selected for you. Meanings are shown in the language you choose above.</p>
       </div>
 
       <p class="status" id="songs-status" role="status"></p>
@@ -42,6 +42,7 @@
 
       <div class="panel-actions">
         <button class="button primary" id="add-words" type="button" disabled>Add words</button>
+        <button class="button" id="select-all" type="button" disabled>Select all</button>
         <form class="song-search" id="song-search">
           <label class="visually-hidden" for="song-query">Find a song by title and artist</label>
           <input id="song-query" type="search" placeholder="Or find any song: title and artist" autocomplete="off" required>
@@ -88,7 +89,7 @@
         <ul class="words" id="words"></ul>
       </div>
       <p class="empty" id="words-empty">
-        No words yet. Tick some songs above and press <strong>Add words</strong>.
+        No words yet. Select some songs above and press <strong>Add words</strong>.
       </p>
       <p class="removed-note" id="removed-note" hidden></p>
     </section>
