@@ -374,24 +374,37 @@ function updateAddButton() {
   updateSelectAllButton();
 }
 
-// Only songs with lyrics can be selected.
-function selectableTracks() {
-  return state.tracks.filter((track) => track.lyrics?.status === 'found');
+// The songs "Select all" picks: the same ones selected automatically when
+// lyrics load, i.e. songs in the language being learned whose words were not
+// added on an earlier visit.
+function selectAllTracks() {
+  return state.tracks.filter(
+    (track) => track.lyrics?.status === 'found' && isLearnable(track) && !wordList.isSongDone(track),
+  );
+}
+
+// Offers "Select all" while some of those songs are unselected, and
+// "Unselect all" once they all are (or when only other songs are selected).
+function selectAllMode() {
+  if (selectAllTracks().some((track) => !track.selected)) return 'select';
+  return selectedTracks().length ? 'unselect' : null;
 }
 
 function updateSelectAllButton() {
-  const selectable = selectableTracks();
-  const allSelected = selectable.length > 0 && selectable.every((track) => track.selected);
-  el.selectAll.disabled = selectable.length === 0;
-  el.selectAll.textContent = allSelected ? 'Unselect all' : 'Select all';
+  const mode = selectAllMode();
+  el.selectAll.disabled = !mode;
+  el.selectAll.textContent = mode === 'unselect' ? 'Unselect all' : `Select all ${LANGUAGE_NAMES[EDITION.learn]} songs`;
 }
 
-// Selects every song with lyrics, or unselects them all when they already are.
 function toggleSelectAll() {
-  const selectable = selectableTracks();
-  const select = !selectable.every((track) => track.selected);
-  for (const track of selectable) track.selected = select;
-  for (const input of el.tracks.querySelectorAll('input[type="checkbox"]:not(:disabled)')) input.checked = select;
+  const mode = selectAllMode();
+  if (!mode) return;
+  if (mode === 'select') for (const track of selectAllTracks()) track.selected = true;
+  else for (const track of state.tracks) track.selected = false;
+  for (const input of el.tracks.querySelectorAll('.track input[type="checkbox"]')) {
+    const track = state.tracks.find((t) => t.id === input.closest('.track').dataset.id);
+    input.checked = Boolean(track?.selected && track.lyrics?.status === 'found');
+  }
   updateAddButton();
 }
 
