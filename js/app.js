@@ -7,7 +7,7 @@ import { h, markedLine, setStatus, speakButton } from './dom.js';
 import { EDITION, LANGUAGES, LEARNING } from './edition.js';
 import * as flashcards from './flashcards.js';
 import { fetchLyrics, searchSongs } from './lyrics.js';
-import { compileCatalogue, findPhrases, phraseKey, phraseText, tokens } from './phrases.js';
+import { catalogueLines, compileCatalogue, findPhrases, phraseKey, phraseText, tokens } from './phrases.js';
 import * as speech from './speech.js';
 import * as spotify from './spotify.js';
 import { load, save } from './storage.js';
@@ -37,6 +37,7 @@ const el = {
   flashcardsOpen: $('flashcards-open'),
   translateAll: $('translate-all'),
   downloadCsv: $('download-csv'),
+  copyPhrases: $('copy-phrases'), // only on pages that offer phrases
   clearWords: $('clear-words'),
   wordsStatus: $('words-status'),
   lists: $('lists'), // only on pages that sort words by language function
@@ -126,6 +127,7 @@ function bindEvents() {
   if (el.lyrics) bindLyrics();
   el.translateAll.addEventListener('click', translateAllLines);
   el.downloadCsv.addEventListener('click', downloadCsv);
+  el.copyPhrases?.addEventListener('click', copyPhrasesForCode);
   el.clearWords.addEventListener('click', clearWords);
   el.words.addEventListener('click', onWordClick);
   el.flashcardsOpen.addEventListener('click', flashcards.open);
@@ -806,6 +808,7 @@ function renderWords() {
   const untranslated = words.some((word) => !word.english);
   el.translateAll.disabled = !untranslated && !state.translatingAll;
   el.downloadCsv.disabled = words.length === 0;
+  if (el.copyPhrases) el.copyPhrases.hidden = !newPickedPhrases().length;
   const waiting = flashcards.waitingCount();
   el.flashcardsOpen.disabled = words.length === 0;
   el.flashcardsOpen.textContent = waiting ? `Flashcards (${waiting})` : 'Flashcards';
@@ -1004,6 +1007,34 @@ function downloadCsv() {
   link.click();
   link.remove();
   URL.revokeObjectURL(url);
+}
+
+// Phrases picked by hand that are not yet in the built-in list.
+function newPickedPhrases() {
+  if (!CATALOGUE) return [];
+  return catalogueLines(wordList.allWords().filter((word) => word.kind === 'phrase' && word.picked), CATALOGUE);
+}
+
+// Copies the hand-picked phrases as lines to paste into phrases-fr.js, so they
+// can be added to the built-in list for everyone. Downloads them as a file
+// where the browser does not allow copying.
+async function copyPhrasesForCode() {
+  const lines = newPickedPhrases();
+  if (!lines.length) return;
+  const text = `${lines.join('\n')}\n`;
+  const count = `${lines.length} ${lines.length === 1 ? 'phrase' : 'phrases'}`;
+  try {
+    await navigator.clipboard.writeText(text);
+    setStatus(el.wordsStatus, `Copied ${count}. Paste them into js/phrases-fr.js under the right heading.`);
+  } catch {
+    const url = URL.createObjectURL(new Blob([text], { type: 'text/plain;charset=utf-8' }));
+    const link = h('a', { href: url, download: 'new-phrases.txt' });
+    document.body.append(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+    setStatus(el.wordsStatus, `Copying is blocked here, so ${count} were downloaded as new-phrases.txt instead.`);
+  }
 }
 
 // Swipe a row left to remove it (touch screens). Desktop uses the × button.
