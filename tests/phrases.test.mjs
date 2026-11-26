@@ -3,7 +3,7 @@ import { test } from 'node:test';
 
 import { cardFace, checkAnswer, gapSegments } from '../js/deck.js';
 import { french } from '../js/lang-fr.js';
-import { compileCatalogue, findPhrases, phraseKey, phraseText } from '../js/phrases.js';
+import { catalogueLines, compileCatalogue, findPhrases, phraseKey, phraseText } from '../js/phrases.js';
 import { PHRASES } from '../js/phrases-fr.js';
 import { FUNCTIONS } from '../js/functions-fr.js';
 
@@ -64,4 +64,22 @@ test('phrase flashcards blank the whole phrase and accept typing without hyphens
   assert.equal(checkAnswer('dis moi', 'dis-moi', french), 'right');
   assert.equal(checkAnswer('Tu me manques !', 'tu me manques', french), 'right');
   assert.equal(checkAnswer('je taime', "je t'aime", french), 'wrong');
+});
+
+test('hand-picked phrases are written as lines for the built-in list', () => {
+  const lines = catalogueLines(
+    [
+      { key: phraseKey("je t'aime", french), word: "je t'aime", meaning: 'I love you', functions: ['expressive'] },
+      { key: phraseKey("l'amour est mort", french), word: "l'amour est mort", meaning: "love's dead", functions: ['expressive', 'describe'] },
+      { key: phraseKey('sous le ciel', french), word: 'sous le ciel', meaning: 'under the sky', functions: [] },
+      { key: phraseKey('dans la rue', french), word: 'dans la rue', meaning: '', functions: ['describe'] },
+      { key: phraseKey('dans la rue', french), word: 'dans la rue', meaning: 'in the street', functions: ['describe'] },
+    ],
+    { byKey: new Map([[phraseKey("je t'aime", french), {}]]) },
+  );
+  assert.deepEqual(lines, [
+    `  { phrase: "l'amour est mort", meaning: "love's dead", lists: ['expressive', 'describe'] },`,
+    `  { phrase: 'sous le ciel', meaning: 'under the sky', lists: [] }, // TODO: add a list`,
+    `  { phrase: 'dans la rue', meaning: '', lists: ['describe'] }, // TODO: add a meaning`,
+  ]);
 });

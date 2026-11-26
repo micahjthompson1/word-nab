@@ -101,3 +101,36 @@ export function phraseText(line, start, end) {
     .replace(/^[^\p{L}]+|[^\p{L}]+$/gu, '')
     .replace(/\s+/g, ' ');
 }
+
+/**
+ * Hand-picked phrases written as lines for the built-in list (phrases-fr.js),
+ * ready to paste in. Phrases already in the list are left out. A line missing
+ * a meaning or a list gets a comment saying so, since the list needs both.
+ * @param {{ key: string, word: string, meaning?: string, functions?: string[] }[]} phrases
+ * @param {ReturnType<typeof compileCatalogue>} catalogue
+ * @returns {string[]}
+ */
+export function catalogueLines(phrases, catalogue) {
+  const seen = new Set();
+  const lines = [];
+  for (const item of phrases) {
+    if (catalogue.byKey.has(item.key) || seen.has(item.key)) continue;
+    seen.add(item.key);
+    const meaning = (item.meaning ?? '').trim();
+    const lists = item.functions ?? [];
+    const missing = [!meaning && 'meaning', !lists.length && 'list'].filter(Boolean);
+    lines.push(
+      `  { phrase: ${quote(item.word)}, meaning: ${quote(meaning)}, lists: [${lists.map(quote).join(', ')}] },` +
+        (missing.length ? ` // TODO: add a ${missing.join(' and a ')}` : ''),
+    );
+  }
+  return lines;
+}
+
+// Quoted the way phrases-fr.js does it: single quotes, or double quotes when
+// the text has an apostrophe in it.
+function quote(text) {
+  const escaped = text.replace(/\\/g, '\\\\');
+  if (!escaped.includes("'")) return `'${escaped}'`;
+  return `"${escaped.replace(/"/g, '\\"')}"`;
+}
