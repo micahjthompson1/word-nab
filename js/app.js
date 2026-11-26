@@ -37,7 +37,8 @@ const el = {
   flashcardsOpen: $('flashcards-open'),
   translateAll: $('translate-all'),
   downloadCsv: $('download-csv'),
-  copyPhrases: $('copy-phrases'), // only on pages that offer phrases
+  // Only on pages that offer phrases, and only shown when the address ends in ?dev.
+  copyPhrases: new URLSearchParams(window.location.search).has('dev') ? $('copy-phrases') : null,
   clearWords: $('clear-words'),
   wordsStatus: $('words-status'),
   lists: $('lists'), // only on pages that sort words by language function
