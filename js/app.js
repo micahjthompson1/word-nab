@@ -15,7 +15,7 @@ import { LANGUAGE_NAMES, cleanLines, detectLanguage, extractWords, wordsInLine }
 import { TranslationQuotaError, cachedTranslation, translateLine } from './translate.js';
 import * as wordList from './words.js';
 
-// A song counts as being in the language learned (and is ticked
+// A song counts as being in the language learned (and is selected
 // automatically) when at least this share of its recognisable words are in
 // it. Low enough to catch songs that switch between two languages.
 const LEARNING_SHARE = 0.3;
@@ -28,6 +28,7 @@ const el = {
   songsStatus: $('songs-status'),
   tracks: $('tracks'),
   addWords: $('add-words'),
+  selectAll: $('select-all'),
   songSearch: $('song-search'),
   songQuery: $('song-query'),
   wordCount: $('word-count'),
@@ -116,6 +117,7 @@ async function start() {
 
 function bindEvents() {
   el.addWords.addEventListener('click', addSelectedWords);
+  el.selectAll.addEventListener('click', toggleSelectAll);
   el.songSearch.addEventListener('submit', onSongSearch);
   el.tracks.addEventListener('change', onTrackToggle);
 
@@ -244,7 +246,7 @@ async function loadLyrics(run) {
 function applyLyrics(track, lyrics) {
   track.lyrics = lyrics;
   track.language = lyrics.status === 'found' ? detectLanguage(lyrics.text) : null;
-  // Tick songs in the language being learned, except ones whose words were
+  // Select songs in the language being learned, except ones whose words were
   // added on an earlier visit.
   track.selected = isLearnable(track) && !wordList.isSongDone(track);
 }
@@ -274,7 +276,7 @@ async function onSongSearch(event) {
   const found = fresh.map((song, index) => {
     const track = { ...song, manual: true, lyrics: null, language: null, selected: false };
     applyLyrics(track, song.lyrics);
-    // Only the best match is ticked; the rest are there in case it is the wrong one.
+    // Only the best match is selected; the rest are there in case it is the wrong one.
     track.selected &&= index === 0;
     return track;
   });
@@ -326,7 +328,7 @@ function trackRow(track) {
       ),
       h('span', { class: `badge ${badge.kind}` }, badge.text),
     ),
-    // Outside the label, so pressing it does not tick the song.
+    // Outside the label, so pressing it does not select the song.
     CATALOGUE &&
       usable &&
       h('button', { class: 'button quiet lyrics-open', type: 'button', title: 'Read the lyrics and pick phrases' }, 'Lyrics'),
@@ -369,6 +371,41 @@ function updateAddButton() {
   const count = selectedTracks().length;
   el.addWords.disabled = count === 0;
   el.addWords.textContent = count ? `Add words from ${count} ${count === 1 ? 'song' : 'songs'}` : 'Add words';
+  updateSelectAllButton();
+}
+
+// The songs "Select all" picks: the same ones selected automatically when
+// lyrics load, i.e. songs in the language being learned whose words were not
+// added on an earlier visit.
+function selectAllTracks() {
+  return state.tracks.filter(
+    (track) => track.lyrics?.status === 'found' && isLearnable(track) && !wordList.isSongDone(track),
+  );
+}
+
+// Offers "Select all" while some of those songs are unselected, and
+// "Unselect all" once they all are (or when only other songs are selected).
+function selectAllMode() {
+  if (selectAllTracks().some((track) => !track.selected)) return 'select';
+  return selectedTracks().length ? 'unselect' : null;
+}
+
+function updateSelectAllButton() {
+  const mode = selectAllMode();
+  el.selectAll.disabled = !mode;
+  el.selectAll.textContent = mode === 'unselect' ? 'Unselect all' : `Select all ${LANGUAGE_NAMES[EDITION.learn]} songs`;
+}
+
+function toggleSelectAll() {
+  const mode = selectAllMode();
+  if (!mode) return;
+  if (mode === 'select') for (const track of selectAllTracks()) track.selected = true;
+  else for (const track of state.tracks) track.selected = false;
+  for (const input of el.tracks.querySelectorAll('.track input[type="checkbox"]')) {
+    const track = state.tracks.find((t) => t.id === input.closest('.track').dataset.id);
+    input.checked = Boolean(track?.selected && track.lyrics?.status === 'found');
+  }
+  updateAddButton();
 }
 
 // ---------------------------------------------------------------------------
@@ -799,7 +836,7 @@ function renderWords() {
   } else if (total && !words.length) {
     el.wordsEmpty.textContent = `All ${total} saved words are hidden by “Hide basics”.`;
   } else if (!total) {
-    el.wordsEmpty.replaceChildren('No words yet. Tick some songs above and press ', h('strong', {}, 'Add words'), '.');
+    el.wordsEmpty.replaceChildren('No words yet. Select some songs above and press ', h('strong', {}, 'Add words'), '.');
   }
   el.wordCount.textContent = total ? (words.length === total ? `${total}` : `${words.length} of ${total}`) : '';
 
